@@ -71,16 +71,16 @@ INSERT INTO jwt_config (id, access_token_ttl_secs, refresh_token_ttl_secs, auto_
 VALUES (1, 86400, 604800, 3600)
 ON CONFLICT (id) DO NOTHING;
 
--- Insert default upstream (arc-generater)
+-- Insert default upstream (example)
 INSERT INTO proxy_upstreams (name, address, health_check_path, enabled)
-VALUES ('arc-generater', '127.0.0.1:7000', '/health', TRUE)
+VALUES ('default', '127.0.0.1:7000', '/health', TRUE)
 ON CONFLICT (name) DO NOTHING;
 
 -- Insert default routes
 INSERT INTO proxy_routes (path_prefix, upstream_id, require_auth, priority)
-SELECT '/api/', id, TRUE, 100 FROM proxy_upstreams WHERE name = 'arc-generater'
+SELECT '/api/', id, TRUE, 100 FROM proxy_upstreams WHERE name = 'default'
 ON CONFLICT (path_prefix) DO NOTHING;
 
 INSERT INTO proxy_routes (path_prefix, upstream_id, require_auth, priority)
-SELECT '/ws/', id, TRUE, 100 FROM proxy_upstreams WHERE name = 'arc-generater'
+SELECT '/ws/', id, TRUE, 100 FROM proxy_upstreams WHERE name = 'default'
 ON CONFLICT (path_prefix) DO NOTHING;

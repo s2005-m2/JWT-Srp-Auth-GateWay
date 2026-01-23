@@ -4,7 +4,7 @@
 
 ## OVERVIEW
 
-High-performance auth gateway for arc-generater. Dual-service architecture: Pingora reverse proxy (port 8080) + Axum auth API (port 3001 internal). Rust + PostgreSQL + JWT.
+High-performance authentication gateway. Dual-service architecture: Pingora reverse proxy (port 8080) + Axum auth API (port 3001 internal). Rust + PostgreSQL + JWT.
 
 ## COMMANDS
 
@@ -105,47 +105,13 @@ use super::config_cache::{ProxyConfigCache, MatchedRoute};
 ```rust
 // Use crate::error::Result<T> (alias for Result<T, AppError>)
 pub async fn login(...) -> Result<Json<LoginResponse>> {
-    // Use ? for propagation
     let user = state.user_service.find_by_email(&req.email).await?;
-    
-    // Return specific AppError variants
     return Err(AppError::InvalidCredentials);
-}
-
-// Add new errors to src/error.rs AppError enum
-#[derive(Debug, thiserror::Error)]
-pub enum AppError {
-    #[error("Invalid credentials")]
-    InvalidCredentials,
-    // ...
-}
-```
-
-### Async Patterns
-```rust
-// Services wrap Arc<PgPool>
-pub struct UserService {
-    pool: Arc<PgPool>,
-}
-
-impl UserService {
-    pub fn new(pool: Arc<PgPool>) -> Self {
-        Self { pool }
-    }
-    
-    pub async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
-        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1")
-            .bind(email)
-            .fetch_optional(self.pool.as_ref())
-            .await?;
-        Ok(user)
-    }
 }
 ```
 
 ### Handler Pattern
 ```rust
-// Request/Response structs with derive macros
 #[derive(Deserialize)]
 pub struct LoginRequest {
     pub email: String,
@@ -158,15 +124,11 @@ pub struct LoginResponse {
     pub access_token: String,
 }
 
-// Handler signature: State + Json extractors -> Result<Json<Response>>
 pub async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>> {
-    // Structured logging
     info!(email = %req.email, "Login attempt");
-    warn!(email = %req.email, "Login failed: user not found");
-    
     Ok(Json(LoginResponse { ... }))
 }
 ```
@@ -186,8 +148,8 @@ pub async fn login(
 
 ```
 Client -> Pingora (:8080) -> /auth/* -> Axum (:3001) -> PostgreSQL
-                          -> /api/*  -> JWT check -> arc-generater (:7000)
-                          -> /ws/*   -> JWT check -> arc-generater (:7000)
+                          -> /api/*  -> JWT check -> upstream service
+                          -> /ws/*   -> JWT check -> upstream service
 ```
 
 **Key insight**: Gateway validates JWT but doesn't issue tokens. Axum API issues tokens. They share JWT secret via config.
@@ -211,7 +173,6 @@ Client -> Pingora (:8080) -> /auth/* -> Axum (:3001) -> PostgreSQL
 | Pingora Gateway | 8080 | 0.0.0.0 (public) |
 | Axum Auth API | 3001 | 127.0.0.1 (internal) |
 | PostgreSQL | 5432 | localhost |
-| arc-generater | 7000 | localhost |
 
 ## NOTES
 

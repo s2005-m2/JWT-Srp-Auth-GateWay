@@ -18,7 +18,7 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpstreamConfig {
-    pub arc_generater: String,
+    pub default_upstream: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -3,7 +3,7 @@ gateway_port = 8080
 api_port = 3001
 
 [upstream]
-arc_generater = "127.0.0.1:7000"
+default_upstream = "127.0.0.1:7000"
 
 [database]
 url = "postgres://postgres:postgres@localhost:5432/arc_auth"

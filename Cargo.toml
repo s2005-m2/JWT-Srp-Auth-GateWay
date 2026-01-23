@@ -2,7 +2,7 @@
 name = "arc_auth"
 version = "0.1.0"
 edition = "2021"
-description = "High-performance auth gateway for arc-generater"
+description = "High-performance authentication gateway with JWT and reverse proxy"
 authors = ["ARC Team"]
 
 [dependencies]
