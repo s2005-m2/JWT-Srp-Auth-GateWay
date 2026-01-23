@@ -120,3 +120,33 @@ pub struct AdminTokenClaims {
     pub iat: i64,
     pub jti: Uuid,
 }
+
+#[derive(Debug, Clone, FromRow)]
+pub struct SystemConfig {
+    pub id: i32,
+    pub smtp_host: String,
+    pub smtp_port: i32,
+    pub smtp_user: String,
+    pub smtp_pass: String,
+    pub from_email: String,
+    pub from_name: String,
+    pub jwt_secret: String,
+    pub jwt_secret_updated_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SmtpConfig {
+    pub smtp_host: String,
+    pub smtp_port: i32,
+    pub smtp_user: String,
+    pub smtp_pass: String,
+    pub from_email: String,
+    pub from_name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JwtSecretInfo {
+    pub updated_at: DateTime<Utc>,
+}

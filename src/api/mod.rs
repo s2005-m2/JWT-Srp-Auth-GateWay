@@ -5,7 +5,8 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use middleware::request_counter_middleware;
 
-use crate::services::{AdminService, EmailService, ProxyConfigService, TokenService, UserService};
+use crate::gateway::JwtValidator;
+use crate::services::{AdminService, EmailService, ProxyConfigService, SystemConfigService, TokenService, UserService};
 
 pub mod handlers;
 pub mod middleware;
@@ -18,6 +19,8 @@ pub struct AppState {
     pub email_service: Arc<EmailService>,
     pub admin_service: Arc<AdminService>,
     pub proxy_config_service: Arc<ProxyConfigService>,
+    pub system_config_service: Arc<SystemConfigService>,
+    pub jwt_validator: Option<Arc<JwtValidator>>,
     pub request_counter: Arc<AtomicU64>,
 }
 
@@ -39,7 +42,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/routes/{id}", put(handlers::update_route).delete(handlers::delete_route))
         .route("/rate-limits", get(handlers::list_rate_limits).post(handlers::create_rate_limit))
         .route("/rate-limits/{id}", put(handlers::update_rate_limit).delete(handlers::delete_rate_limit))
-        .route("/jwt", get(handlers::get_jwt_config).put(handlers::update_jwt_config));
+        .route("/jwt", get(handlers::get_jwt_config).put(handlers::update_jwt_config))
+        .route("/smtp", get(handlers::get_smtp_config).put(handlers::update_smtp_config))
+        .route("/jwt-secret", get(handlers::get_jwt_secret_info).post(handlers::rotate_jwt_secret));
 
     Router::new()
         .route("/auth/register", post(handlers::register))

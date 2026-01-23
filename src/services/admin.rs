@@ -9,15 +9,16 @@ use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::models::{Admin, AdminRegistrationToken, AdminTokenClaims};
+use crate::services::SystemConfigService;
 
 pub struct AdminService {
     pool: Arc<PgPool>,
-    jwt_secret: String,
+    system_config: Arc<SystemConfigService>,
 }
 
 impl AdminService {
-    pub fn new(pool: Arc<PgPool>, jwt_secret: String) -> Self {
-        Self { pool, jwt_secret }
+    pub fn new(pool: Arc<PgPool>, system_config: Arc<SystemConfigService>) -> Self {
+        Self { pool, system_config }
     }
 
     pub async fn find_by_username(&self, username: &str) -> Result<Option<Admin>> {
@@ -110,8 +111,10 @@ impl AdminService {
         Ok(count.0 > 0)
     }
 
-    pub fn generate_admin_jwt(&self, admin: &Admin) -> Result<String> {
+    pub async fn generate_admin_jwt(&self, admin: &Admin) -> Result<String> {
         use jsonwebtoken::{encode, EncodingKey, Header};
+        
+        let jwt_secret = self.system_config.get_jwt_secret().await?;
         
         const ADMIN_TOKEN_TTL_SECS: i64 = 86400;
         let now = chrono::Utc::now().timestamp();
@@ -129,19 +132,21 @@ impl AdminService {
         let token = encode(
             &Header::default(),
             &claims,
-            &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
+            &EncodingKey::from_secret(jwt_secret.as_bytes()),
         )
         .map_err(|_| AppError::Internal(anyhow::anyhow!("JWT encoding failed")))?;
 
         Ok(token)
     }
 
-    pub fn validate_admin_jwt(&self, token: &str) -> Result<AdminTokenClaims> {
+    pub async fn validate_admin_jwt(&self, token: &str) -> Result<AdminTokenClaims> {
         use jsonwebtoken::{decode, DecodingKey, Validation};
+
+        let jwt_secret = self.system_config.get_jwt_secret().await?;
 
         let token_data = decode::<AdminTokenClaims>(
             token,
-            &DecodingKey::from_secret(self.jwt_secret.as_bytes()),
+            &DecodingKey::from_secret(jwt_secret.as_bytes()),
             &Validation::default(),
         )
         .map_err(|_| AppError::InvalidToken)?;

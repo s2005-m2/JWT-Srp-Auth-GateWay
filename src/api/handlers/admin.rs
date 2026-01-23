@@ -45,7 +45,7 @@ pub async fn admin_register(
         .create_with_token(&req.username, &req.password, &req.registration_token)
         .await?;
 
-    let token = state.admin_service.generate_admin_jwt(&admin)?;
+    let token = state.admin_service.generate_admin_jwt(&admin).await?;
 
     Ok(Json(AdminAuthResponse {
         admin: AdminInfo {
@@ -71,7 +71,7 @@ pub async fn admin_login(
         return Err(AppError::InvalidCredentials);
     }
 
-    let token = state.admin_service.generate_admin_jwt(&admin)?;
+    let token = state.admin_service.generate_admin_jwt(&admin).await?;
 
     Ok(Json(AdminAuthResponse {
         admin: AdminInfo {

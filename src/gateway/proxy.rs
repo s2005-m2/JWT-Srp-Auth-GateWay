@@ -134,7 +134,7 @@ impl ProxyHttp for AuthGateway {
                 None => return self.send_error(session, 401, "Missing token").await,
             };
 
-            let claims = match self.jwt_validator.validate(token) {
+            let claims = match self.jwt_validator.validate(token).await {
                 Ok(c) => c,
                 Err(JwtError::Expired) => {
                     return self.send_error(session, 401, "Token expired").await;

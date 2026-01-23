@@ -7,7 +7,6 @@ pub struct AppConfig {
     pub upstream: UpstreamConfig,
     pub database: DatabaseConfig,
     pub jwt: JwtConfig,
-    pub email: EmailConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -29,20 +28,19 @@ pub struct DatabaseConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct JwtConfig {
-    pub secret: String,
     pub access_token_ttl: i64,
     pub refresh_token_ttl: i64,
     pub auto_refresh_threshold: i64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct EmailConfig {
-    pub smtp_host: String,
-    pub smtp_port: u16,
-    pub smtp_user: String,
-    pub smtp_pass: String,
-    pub from_email: String,
-    pub from_name: String,
+impl Default for JwtConfig {
+    fn default() -> Self {
+        Self {
+            access_token_ttl: 86400,
+            refresh_token_ttl: 604800,
+            auto_refresh_threshold: 3600,
+        }
+    }
 }
 
 impl AppConfig {
@@ -65,17 +63,6 @@ impl Default for ServerConfig {
         Self {
             gateway_port: 8080,
             api_port: 3001,
-        }
-    }
-}
-
-impl Default for JwtConfig {
-    fn default() -> Self {
-        Self {
-            secret: String::new(),
-            access_token_ttl: 86400,
-            refresh_token_ttl: 604800,
-            auto_refresh_threshold: 3600,
         }
     }
 }

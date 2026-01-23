@@ -32,7 +32,7 @@ pub async fn refresh(
 
     state.token_service.revoke_refresh_token(&req.refresh_token).await?;
 
-    let access = state.token_service.generate_access_token(user.id, &user.email)?;
+    let access = state.token_service.generate_access_token(user.id, &user.email).await?;
     let refresh = state.token_service.generate_refresh_token(user.id).await?;
 
     Ok(Json(RefreshResponse { 

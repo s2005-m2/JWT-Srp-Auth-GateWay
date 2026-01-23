@@ -39,7 +39,7 @@ pub async fn login(
         return Err(AppError::InvalidCredentials);
     }
 
-    let access = state.token_service.generate_access_token(user.id, &user.email)?;
+    let access = state.token_service.generate_access_token(user.id, &user.email).await?;
     let refresh = state.token_service.generate_refresh_token(user.id).await?;
 
     info!(email = %req.email, user_id = %user.id, "Login successful");

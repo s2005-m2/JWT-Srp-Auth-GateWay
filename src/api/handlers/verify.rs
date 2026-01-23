@@ -74,7 +74,7 @@ async fn verify_code(state: &AppState, email: &str, code: &str, code_type: &str)
 }
 
 async fn generate_tokens(state: &AppState, user: &User) -> Result<(String, String)> {
-    let access = state.token_service.generate_access_token(user.id, &user.email)?;
+    let access = state.token_service.generate_access_token(user.id, &user.email).await?;
     let refresh = state.token_service.generate_refresh_token(user.id).await?;
     Ok((access, refresh))
 }

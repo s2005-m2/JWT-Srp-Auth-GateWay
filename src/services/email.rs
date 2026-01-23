@@ -1,16 +1,18 @@
+use std::sync::Arc;
+
 use mail_builder::MessageBuilder;
 use mail_send::SmtpClientBuilder;
 
-use crate::config::EmailConfig;
 use crate::error::Result;
+use crate::services::SystemConfigService;
 
 pub struct EmailService {
-    config: EmailConfig,
+    system_config: Arc<SystemConfigService>,
 }
 
 impl EmailService {
-    pub fn new(config: EmailConfig) -> Self {
-        Self { config }
+    pub fn new(system_config: Arc<SystemConfigService>) -> Self {
+        Self { system_config }
     }
 
     pub async fn send_verification_code(&self, to_email: &str, code: &str) -> Result<()> {
@@ -49,25 +51,27 @@ impl EmailService {
     }
 
     async fn send_email(&self, to: &str, subject: &str, html_body: &str) -> Result<()> {
-        let message = MessageBuilder::new()
-            .from((self.config.from_name.as_str(), self.config.from_email.as_str()))
-            .to(to)
-            .subject(subject)
-            .html_body(html_body)
-            .write_to_vec()
-            .map_err(|e| anyhow::anyhow!("Failed to build email: {}", e))?;
+        let config = self.system_config.get_smtp_config().await?;
 
-        SmtpClientBuilder::new(self.config.smtp_host.clone(), self.config.smtp_port)
-            .implicit_tls(self.config.smtp_port == 465)
-            .credentials((self.config.smtp_user.clone(), self.config.smtp_pass.clone()))
+        if config.smtp_host.is_empty() {
+            return Err(anyhow::anyhow!("SMTP not configured").into());
+        }
+
+        let implicit_tls = config.smtp_port == 465;
+
+        SmtpClientBuilder::new(config.smtp_host.clone(), config.smtp_port as u16)
+            .implicit_tls(implicit_tls)
+            .credentials((config.smtp_user.clone(), config.smtp_pass.clone()))
             .connect()
             .await
             .map_err(|e| anyhow::anyhow!("SMTP connection failed: {}", e))?
-            .send(mail_builder::MessageBuilder::new()
-                .from((self.config.from_name.as_str(), self.config.from_email.as_str()))
-                .to(to)
-                .subject(subject)
-                .html_body(html_body))
+            .send(
+                MessageBuilder::new()
+                    .from((config.from_name.as_str(), config.from_email.as_str()))
+                    .to(to)
+                    .subject(subject)
+                    .html_body(html_body),
+            )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send email: {}", e))?;
 

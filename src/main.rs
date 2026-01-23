@@ -14,7 +14,7 @@ use api::AppState;
 use config::AppConfig;
 use gateway::{JwtValidator, ProxyConfigCache};
 use gateway::config_cache::CachedRoute;
-use services::{AdminService, EmailService, ProxyConfigService, TokenService, UserService};
+use services::{AdminService, EmailService, ProxyConfigService, SystemConfigService, TokenService, UserService};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -26,11 +26,24 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Running database migrations...");
     db::run_migrations(&db_pool).await?;
 
-    let jwt_validator = Arc::new(JwtValidator::new(&config.jwt));
+    let system_config_service = Arc::new(SystemConfigService::new(db_pool.clone()));
+    system_config_service.initialize().await?;
+
+    let jwt_validator = Arc::new(JwtValidator::new(
+        system_config_service.clone(),
+        config.jwt.auto_refresh_threshold,
+    ));
+    jwt_validator.init().await?;
     let user_service = Arc::new(UserService::new(db_pool.clone()));
-    let token_service = Arc::new(TokenService::new(db_pool.clone(), config.jwt.clone()));
-    let email_service = Arc::new(EmailService::new(config.email.clone()));
-    let admin_service = Arc::new(AdminService::new(db_pool.clone(), config.jwt.secret.clone()));
+    let token_service = Arc::new(TokenService::new(
+        db_pool.clone(),
+        system_config_service.clone(),
+        config.jwt.access_token_ttl,
+        config.jwt.refresh_token_ttl,
+        config.jwt.auto_refresh_threshold,
+    ));
+    let email_service = Arc::new(EmailService::new(system_config_service.clone()));
+    let admin_service = Arc::new(AdminService::new(db_pool.clone(), system_config_service.clone()));
     let proxy_config_service = Arc::new(ProxyConfigService::new(db_pool.clone()));
 
     let config_cache = Arc::new(ProxyConfigCache::new(
@@ -42,6 +55,9 @@ async fn main() -> anyhow::Result<()> {
 
     let request_counter = Arc::new(AtomicU64::new(0));
 
+    let system_config_for_scheduler = system_config_service.clone();
+    let jwt_validator_for_scheduler = jwt_validator.clone();
+
     let state = AppState {
         db_pool: db_pool.clone(),
         user_service,
@@ -49,8 +65,14 @@ async fn main() -> anyhow::Result<()> {
         email_service,
         admin_service,
         proxy_config_service,
+        system_config_service,
+        jwt_validator: Some(jwt_validator.clone()),
         request_counter,
     };
+
+    tokio::spawn(async move {
+        jwt_rotation_scheduler(system_config_for_scheduler, jwt_validator_for_scheduler).await;
+    });
 
     let api_port = config.server.api_port;
     tokio::spawn(async move {
@@ -135,4 +157,37 @@ async fn load_proxy_config(
     cache.update_routes(cached_routes);
     tracing::info!("Loaded proxy configuration from database");
     Ok(())
+}
+
+async fn jwt_rotation_scheduler(
+    system_config: Arc<SystemConfigService>,
+    jwt_validator: Arc<JwtValidator>,
+) {
+    use tokio::time::{interval, Duration};
+    
+    let mut check_interval = interval(Duration::from_secs(24 * 60 * 60));
+    
+    loop {
+        check_interval.tick().await;
+        
+        match system_config.should_auto_rotate().await {
+            Ok(true) => {
+                tracing::info!("JWT secret is older than 30 days, rotating...");
+                if let Err(e) = system_config.rotate_jwt_secret().await {
+                    tracing::error!("Failed to auto-rotate JWT secret: {}", e);
+                    continue;
+                }
+                if let Err(e) = jwt_validator.refresh_secret().await {
+                    tracing::error!("Failed to refresh JWT validator: {}", e);
+                }
+                tracing::info!("JWT secret auto-rotated successfully");
+            }
+            Ok(false) => {
+                tracing::debug!("JWT secret is still fresh, no rotation needed");
+            }
+            Err(e) => {
+                tracing::error!("Failed to check JWT rotation status: {}", e);
+            }
+        }
+    }
 }
