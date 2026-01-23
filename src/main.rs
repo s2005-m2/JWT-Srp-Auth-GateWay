@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{atomic::AtomicU64, Arc};
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -12,7 +12,8 @@ mod services;
 
 use api::AppState;
 use config::AppConfig;
-use gateway::JwtValidator;
+use gateway::{JwtValidator, ProxyConfigCache};
+use gateway::config_cache::{CachedRoute, CachedUpstream};
 use services::{AdminService, EmailService, ProxyConfigService, TokenService, UserService};
 
 #[tokio::main]
@@ -32,7 +33,14 @@ async fn main() -> anyhow::Result<()> {
     let admin_service = Arc::new(AdminService::new(db_pool.clone(), config.jwt.secret.clone()));
     let proxy_config_service = Arc::new(ProxyConfigService::new(db_pool.clone()));
 
+    let config_cache = Arc::new(ProxyConfigCache::new(
+        format!("127.0.0.1:{}", config.server.api_port),
+    ));
+    load_proxy_config(&proxy_config_service, &config_cache).await?;
+
     initialize_admin_token(&admin_service).await?;
+
+    let request_counter = Arc::new(AtomicU64::new(0));
 
     let state = AppState {
         db_pool: db_pool.clone(),
@@ -41,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
         email_service,
         admin_service,
         proxy_config_service,
+        request_counter,
     };
 
     let api_port = config.server.api_port;
@@ -56,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Starting Pingora gateway on 0.0.0.0:{}", config.server.gateway_port);
     
     std::thread::spawn(move || {
-        start_gateway(config, jwt_validator);
+        start_gateway(config, jwt_validator, config_cache);
     });
 
     tokio::signal::ctrl_c().await?;
@@ -90,7 +99,7 @@ async fn initialize_admin_token(admin_service: &AdminService) -> anyhow::Result<
     Ok(())
 }
 
-fn start_gateway(config: Arc<AppConfig>, jwt_validator: Arc<JwtValidator>) {
+fn start_gateway(config: Arc<AppConfig>, jwt_validator: Arc<JwtValidator>, config_cache: Arc<ProxyConfigCache>) {
     use pingora::server::Server;
     use pingora::proxy::http_proxy_service;
     use gateway::proxy::AuthGateway;
@@ -98,15 +107,53 @@ fn start_gateway(config: Arc<AppConfig>, jwt_validator: Arc<JwtValidator>) {
     let mut server = Server::new(None).expect("Failed to create server");
     server.bootstrap();
 
-    let gateway = AuthGateway::new(
-        jwt_validator,
-        format!("127.0.0.1:{}", config.server.api_port),
-        config.upstream.arc_generater.clone(),
-    );
+    let gateway = AuthGateway::new(jwt_validator, config_cache);
 
     let mut proxy = http_proxy_service(&server.configuration, gateway);
     proxy.add_tcp(&format!("0.0.0.0:{}", config.server.gateway_port));
 
     server.add_service(proxy);
     server.run_forever();
+}
+
+async fn load_proxy_config(
+    service: &ProxyConfigService,
+    cache: &ProxyConfigCache,
+) -> anyhow::Result<()> {
+    let upstreams = service.list_upstreams().await?;
+    let routes = service.list_routes().await?;
+
+    let upstream_map: std::collections::HashMap<uuid::Uuid, String> = upstreams
+        .iter()
+        .filter(|u| u.enabled)
+        .map(|u| (u.id, u.address.clone()))
+        .collect();
+
+    let cached_upstreams: Vec<CachedUpstream> = upstreams
+        .into_iter()
+        .filter(|u| u.enabled)
+        .map(|u| CachedUpstream {
+            id: u.id,
+            name: u.name,
+            address: u.address,
+        })
+        .collect();
+
+    let cached_routes: Vec<CachedRoute> = routes
+        .into_iter()
+        .filter(|r| r.enabled)
+        .filter_map(|r| {
+            upstream_map.get(&r.upstream_id).map(|addr| CachedRoute {
+                path_prefix: r.path_prefix,
+                upstream_address: addr.clone(),
+                strip_prefix: r.strip_prefix,
+                require_auth: r.require_auth,
+                priority: r.priority,
+            })
+        })
+        .collect();
+
+    cache.update_config(cached_routes, cached_upstreams);
+    tracing::info!("Loaded proxy configuration from database");
+    Ok(())
 }

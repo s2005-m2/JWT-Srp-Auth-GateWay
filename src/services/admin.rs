@@ -37,7 +37,7 @@ impl AdminService {
     }
 
     pub async fn count(&self) -> Result<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM admins")
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*)::BIGINT FROM admins")
             .fetch_one(self.pool.as_ref())
             .await?;
         Ok(count.0)
@@ -103,7 +103,7 @@ impl AdminService {
 
     pub async fn has_valid_registration_token(&self) -> Result<bool> {
         let count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM admin_registration_tokens WHERE used = FALSE AND expires_at > NOW()"
+            "SELECT COUNT(*)::BIGINT FROM admin_registration_tokens WHERE used = FALSE AND expires_at > NOW()"
         )
         .fetch_one(self.pool.as_ref())
         .await?;

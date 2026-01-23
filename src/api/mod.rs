@@ -1,7 +1,9 @@
-use axum::{routing::{get, post, put}, Router};
+use axum::{middleware as axum_middleware, routing::{get, post, put}, Router};
 use sqlx::PgPool;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicU64, Arc};
 use tower_http::services::{ServeDir, ServeFile};
+
+use middleware::request_counter_middleware;
 
 use crate::services::{AdminService, EmailService, ProxyConfigService, TokenService, UserService};
 
@@ -16,11 +18,14 @@ pub struct AppState {
     pub email_service: Arc<EmailService>,
     pub admin_service: Arc<AdminService>,
     pub proxy_config_service: Arc<ProxyConfigService>,
+    pub request_counter: Arc<AtomicU64>,
 }
 
 pub fn create_router(state: AppState) -> Router {
     let serve_dir = ServeDir::new("web/dist")
         .not_found_service(ServeFile::new("web/dist/index.html"));
+
+    let counter = state.request_counter.clone();
 
     let admin_routes = Router::new()
         .route("/login", post(handlers::admin_login))
@@ -47,4 +52,7 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/api/config", config_routes)
         .fallback_service(serve_dir)
         .with_state(state)
+        .layer(axum_middleware::from_fn(move |req, next| {
+            request_counter_middleware(req, next, counter.clone())
+        }))
 }

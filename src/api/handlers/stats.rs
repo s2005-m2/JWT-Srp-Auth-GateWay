@@ -1,6 +1,7 @@
 use axum::{extract::State, Json};
 use serde::Serialize;
 use chrono::{DateTime, Utc};
+use std::sync::atomic::Ordering;
 
 use crate::api::AppState;
 use crate::error::Result;
@@ -8,9 +9,8 @@ use crate::error::Result;
 #[derive(Serialize)]
 pub struct StatsResponse {
     pub active_users: i64,
-    pub total_requests: i64,
+    pub total_requests: u64,
     pub system_status: String,
-    pub uptime_percent: f64,
     pub server_start_time: DateTime<Utc>,
 }
 
@@ -53,16 +53,17 @@ pub async fn get_stats(
     State(state): State<AppState>,
 ) -> Result<Json<StatsResponse>> {
     let active_users: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '30 days'"
+        "SELECT COUNT(*)::BIGINT FROM users WHERE created_at > NOW() - INTERVAL '30 days'"
     )
     .fetch_one(state.db_pool.as_ref())
     .await?;
 
+    let total_requests = state.request_counter.load(Ordering::Relaxed);
+
     Ok(Json(StatsResponse {
         active_users: active_users.0,
-        total_requests: 0,
+        total_requests,
         system_status: "healthy".to_string(),
-        uptime_percent: 99.9,
         server_start_time: get_server_start_time(),
     }))
 }
@@ -76,7 +77,7 @@ pub async fn get_users(
     .fetch_all(state.db_pool.as_ref())
     .await?;
 
-    let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+    let total: (i64,) = sqlx::query_as("SELECT COUNT(*)::BIGINT FROM users")
         .fetch_one(state.db_pool.as_ref())
         .await?;
 

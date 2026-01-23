@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { Activity, Users, Globe, Clock } from 'lucide-react';
+import { Activity, Users, Globe } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface Stats {
   active_users: number;
   total_requests: number;
   system_status: string;
-  uptime_percent: number;
 }
 
 interface ActivityItem {
@@ -64,12 +63,6 @@ export default function Dashboard() {
       value: stats?.system_status ?? '-',
       icon: Activity,
       color: "text-emerald-600"
-    },
-    {
-      title: t('dashboard.uptime'),
-      value: stats ? `${stats.uptime_percent}%` : '-',
-      icon: Clock,
-      color: "text-indigo-600"
     }
   ];
 

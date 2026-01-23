@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::AppState;
 use crate::error::{AppError, Result};
-use crate::models::User;
+use crate::models::{User, UserInfo};
 
 #[derive(Deserialize)]
 pub struct VerifyRequest {
@@ -19,12 +19,6 @@ pub struct AuthResponse {
     pub refresh_token: String,
 }
 
-#[derive(Serialize)]
-pub struct UserInfo {
-    pub id: String,
-    pub email: String,
-}
-
 pub async fn verify(
     State(state): State<AppState>,
     Json(req): Json<VerifyRequest>,
@@ -37,7 +31,7 @@ pub async fn verify(
     }
 
     let user = state.user_service.create(&req.email, &req.password).await?;
-    let tokens = generate_tokens(&state, &user)?;
+    let tokens = generate_tokens(&state, &user).await?;
 
     Ok(Json(AuthResponse {
         user: UserInfo {
@@ -79,8 +73,8 @@ async fn verify_code(state: &AppState, email: &str, code: &str, code_type: &str)
     Ok(result.is_some())
 }
 
-fn generate_tokens(state: &AppState, user: &User) -> Result<(String, String)> {
+async fn generate_tokens(state: &AppState, user: &User) -> Result<(String, String)> {
     let access = state.token_service.generate_access_token(user.id, &user.email)?;
-    let refresh = state.token_service.generate_access_token(user.id, &user.email)?;
+    let refresh = state.token_service.generate_refresh_token(user.id).await?;
     Ok((access, refresh))
 }

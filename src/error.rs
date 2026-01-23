@@ -97,6 +97,16 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        match &self {
+            Self::Database(e) => {
+                tracing::error!(error = %e, error_debug = ?e, "Database error occurred");
+            }
+            Self::Internal(e) => {
+                tracing::error!(error = %e, error_debug = ?e, "Internal error occurred");
+            }
+            _ => {}
+        }
+
         let status = self.status_code();
         let body = ErrorResponse {
             error: ErrorBody {

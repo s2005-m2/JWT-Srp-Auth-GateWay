@@ -2,7 +2,7 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::api::AppState;
-use crate::error::{AppError, Result};
+use crate::error::Result;
 
 #[derive(Deserialize)]
 pub struct RefreshRequest {
@@ -12,6 +12,7 @@ pub struct RefreshRequest {
 #[derive(Serialize)]
 pub struct RefreshResponse {
     pub access_token: String,
+    pub refresh_token: String,
 }
 
 pub async fn refresh(
@@ -20,12 +21,22 @@ pub async fn refresh(
 ) -> Result<Json<RefreshResponse>> {
     let claims = state
         .token_service
-        .validate_access_token(&req.refresh_token)
-        .map_err(|_| AppError::InvalidToken)?;
+        .validate_refresh_token(&req.refresh_token)
+        .await?;
 
-    let access = state
-        .token_service
-        .generate_access_token(claims.sub, &claims.email)?;
+    let user = state
+        .user_service
+        .find_by_id(claims.sub)
+        .await?
+        .ok_or(crate::error::AppError::InvalidToken)?;
 
-    Ok(Json(RefreshResponse { access_token: access }))
+    state.token_service.revoke_refresh_token(&req.refresh_token).await?;
+
+    let access = state.token_service.generate_access_token(user.id, &user.email)?;
+    let refresh = state.token_service.generate_refresh_token(user.id).await?;
+
+    Ok(Json(RefreshResponse { 
+        access_token: access,
+        refresh_token: refresh,
+    }))
 }

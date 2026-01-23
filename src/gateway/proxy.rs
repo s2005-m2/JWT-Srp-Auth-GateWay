@@ -5,6 +5,7 @@ use pingora::prelude::HttpPeer;
 use pingora::proxy::{ProxyHttp, Session};
 use std::sync::Arc;
 
+use super::config_cache::{ProxyConfigCache, MatchedRoute};
 use super::jwt::{JwtError, JwtValidator};
 
 type Result<T> = pingora::Result<T>;
@@ -22,33 +23,25 @@ impl AuthGateway {
 
 pub struct AuthGateway {
     jwt_validator: Arc<JwtValidator>,
-    auth_upstream: String,
-    api_upstream: String,
+    config_cache: Arc<ProxyConfigCache>,
 }
 
 pub struct RequestCtx {
     pub user_id: Option<String>,
     pub should_refresh: bool,
-    pub route_type: RouteType,
+    pub matched_route: Option<MatchedRoute>,
 }
 
-#[derive(Clone, Copy)]
-pub enum RouteType {
-    Auth,
-    Api,
-    NotFound,
-}
+
 
 impl AuthGateway {
     pub fn new(
         jwt_validator: Arc<JwtValidator>,
-        auth_upstream: String,
-        api_upstream: String,
+        config_cache: Arc<ProxyConfigCache>,
     ) -> Self {
         Self {
             jwt_validator,
-            auth_upstream,
-            api_upstream,
+            config_cache,
         }
     }
 
@@ -75,26 +68,22 @@ impl ProxyHttp for AuthGateway {
         RequestCtx {
             user_id: None,
             should_refresh: false,
-            route_type: RouteType::NotFound,
+            matched_route: None,
         }
     }
 
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
         let path = session.req_header().uri.path();
 
-        if path.starts_with("/auth/") {
-            ctx.route_type = RouteType::Auth;
-            return Ok(false);
-        }
+        let matched = match self.config_cache.match_route(path) {
+            Some(r) => r,
+            None => return self.send_error(session, 404, "Not found").await,
+        };
 
-        if path.starts_with("/api/") || path.starts_with("/ws/") {
-            ctx.route_type = RouteType::Api;
-
+        if matched.require_auth {
             let token = match Self::extract_bearer_token(session.req_header()) {
                 Some(t) => t,
-                None => {
-                    return self.send_error(session, 401, "Missing token").await;
-                }
+                None => return self.send_error(session, 401, "Missing token").await,
             };
 
             let claims = match self.jwt_validator.validate(token) {
@@ -109,11 +98,10 @@ impl ProxyHttp for AuthGateway {
 
             ctx.user_id = Some(claims.sub.to_string());
             ctx.should_refresh = self.jwt_validator.should_refresh(&claims);
-
-            return Ok(false);
         }
 
-        self.send_error(session, 404, "Not found").await
+        ctx.matched_route = Some(matched);
+        Ok(false)
     }
 
     async fn upstream_peer(
@@ -121,14 +109,26 @@ impl ProxyHttp for AuthGateway {
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
-        let addr = match ctx.route_type {
-            RouteType::Auth => &self.auth_upstream,
-            RouteType::Api => &self.api_upstream,
-            RouteType::NotFound => &self.auth_upstream,
-        };
+        let addr = ctx
+            .matched_route
+            .as_ref()
+            .map(|r| r.upstream_address.as_str())
+            .unwrap_or(self.config_cache.auth_upstream());
 
         let (host, port) = Self::parse_upstream(addr);
         let peer = HttpPeer::new((host.as_str(), port), false, String::new());
         Ok(Box::new(peer))
+    }
+
+    async fn upstream_request_filter(
+        &self,
+        _session: &mut Session,
+        upstream_request: &mut RequestHeader,
+        ctx: &mut Self::CTX,
+    ) -> Result<()> {
+        if let Some(user_id) = &ctx.user_id {
+            upstream_request.insert_header("X-User-Id", user_id)?;
+        }
+        Ok(())
     }
 }

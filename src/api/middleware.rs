@@ -1,8 +1,13 @@
 use std::{
     collections::HashMap,
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     time::{Duration, Instant},
 };
+
+use axum::{extract::Request, middleware::Next, response::Response};
 
 pub struct RateLimiter {
     windows: Mutex<HashMap<String, Vec<Instant>>>,
@@ -33,4 +38,13 @@ impl RateLimiter {
         timestamps.push(now);
         true
     }
+}
+
+pub async fn request_counter_middleware(
+    request: Request,
+    next: Next,
+    counter: Arc<AtomicU64>,
+) -> Response {
+    counter.fetch_add(1, Ordering::Relaxed);
+    next.run(request).await
 }

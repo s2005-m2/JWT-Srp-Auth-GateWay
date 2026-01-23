@@ -1,12 +1,13 @@
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::config::JwtConfig;
 use crate::error::{AppError, Result};
-use crate::models::AccessTokenClaims;
+use crate::models::{AccessTokenClaims, RefreshTokenClaims};
 
 pub struct TokenService {
     pool: Arc<PgPool>,
@@ -58,4 +59,70 @@ impl TokenService {
         let now = Utc::now().timestamp();
         claims.exp - now < self.config.auto_refresh_threshold
     }
+
+    pub async fn generate_refresh_token(&self, user_id: Uuid) -> Result<String> {
+        let now = Utc::now();
+        let exp = now + Duration::seconds(self.config.refresh_token_ttl);
+        let jti = Uuid::new_v4();
+
+        let claims = RefreshTokenClaims {
+            sub: user_id,
+            exp: exp.timestamp(),
+            iat: now.timestamp(),
+            jti,
+        };
+
+        let token = encode(&Header::default(), &claims, &self.encoding_key)
+            .map_err(|_| AppError::Internal(anyhow::anyhow!("Failed to generate refresh token")))?;
+
+        let token_hash = hash_token(&token);
+        sqlx::query(
+            "INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)"
+        )
+        .bind(user_id)
+        .bind(&token_hash)
+        .bind(exp)
+        .execute(self.pool.as_ref())
+        .await?;
+
+        Ok(token)
+    }
+
+    pub async fn validate_refresh_token(&self, token: &str) -> Result<RefreshTokenClaims> {
+        let validation = Validation::default();
+        let token_data = decode::<RefreshTokenClaims>(token, &self.decoding_key, &validation)
+            .map_err(|e| match e.kind() {
+                jsonwebtoken::errors::ErrorKind::ExpiredSignature => AppError::TokenExpired,
+                _ => AppError::InvalidToken,
+            })?;
+
+        let token_hash = hash_token(token);
+        let exists: Option<(bool,)> = sqlx::query_as(
+            "SELECT revoked FROM refresh_tokens WHERE token_hash = $1 AND expires_at > NOW()"
+        )
+        .bind(&token_hash)
+        .fetch_optional(self.pool.as_ref())
+        .await?;
+
+        match exists {
+            Some((true,)) => Err(AppError::TokenRevoked),
+            Some((false,)) => Ok(token_data.claims),
+            None => Err(AppError::InvalidToken),
+        }
+    }
+
+    pub async fn revoke_refresh_token(&self, token: &str) -> Result<()> {
+        let token_hash = hash_token(token);
+        sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = $1")
+            .bind(&token_hash)
+            .execute(self.pool.as_ref())
+            .await?;
+        Ok(())
+    }
+}
+
+fn hash_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
 }

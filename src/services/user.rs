@@ -43,7 +43,15 @@ impl UserService {
         .bind(email)
         .bind(password_hash)
         .fetch_one(self.pool.as_ref())
-        .await?;
+        .await
+        .map_err(|e| {
+            if let sqlx::Error::Database(db_err) = &e {
+                if db_err.constraint() == Some("users_email_key") {
+                    return AppError::EmailExists;
+                }
+            }
+            AppError::Database(e)
+        })?;
 
         Ok(user)
     }

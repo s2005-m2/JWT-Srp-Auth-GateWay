@@ -4,6 +4,7 @@ use tracing::{info, warn};
 
 use crate::api::AppState;
 use crate::error::{AppError, Result};
+use crate::models::UserInfo;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -16,12 +17,6 @@ pub struct LoginResponse {
     pub user: UserInfo,
     pub access_token: String,
     pub refresh_token: String,
-}
-
-#[derive(Serialize)]
-pub struct UserInfo {
-    pub id: String,
-    pub email: String,
 }
 
 pub async fn login(
@@ -45,7 +40,7 @@ pub async fn login(
     }
 
     let access = state.token_service.generate_access_token(user.id, &user.email)?;
-    let refresh = state.token_service.generate_access_token(user.id, &user.email)?;
+    let refresh = state.token_service.generate_refresh_token(user.id).await?;
 
     info!(email = %req.email, user_id = %user.id, "Login successful");
 
