@@ -111,6 +111,16 @@ POST /auth/refresh
 {"refresh_token": "eyJ..."}
 ```
 
+### 密码重置
+
+```http
+POST /auth/password/reset
+{"email": "user@example.com"}
+
+POST /auth/password/reset/confirm
+{"email": "user@example.com", "code": "123456", "new_password": "NewSecurePass123!"}
+```
+
 ### 受保护 API
 
 ```http
@@ -148,6 +158,7 @@ WebSocket 和 SSE 连接在建立时进行一次 JWT 验证，连接期间不再
 | `INVALID_CREDENTIALS` | 401 | 认证失败 |
 | `INVALID_TOKEN` | 401 | Token 无效 |
 | `TOKEN_EXPIRED` | 401 | Token 过期 |
+| `EMAIL_NOT_VERIFIED` | 403 | 邮箱未验证 |
 | `EMAIL_EXISTS` | 409 | 邮箱已存在 |
 | `RATE_LIMITED` | 429 | 请求频率超限 |
 

@@ -1,5 +1,6 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { setApiConfig } from '../lib/api';
 
 interface AuthContextType {
   token: string | null;
@@ -22,6 +23,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('admin_token');
     setToken(null);
   };
+
+  useEffect(() => {
+    setApiConfig({
+      getToken: () => token,
+      onUnauthorized: logout,
+    });
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{ token, login, logout, isAuthenticated: !!token }}>

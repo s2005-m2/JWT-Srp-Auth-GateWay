@@ -46,8 +46,14 @@ async fn main() -> anyhow::Result<()> {
     let admin_service = Arc::new(AdminService::new(db_pool.clone(), system_config_service.clone()));
     let proxy_config_service = Arc::new(ProxyConfigService::new(db_pool.clone()));
 
+    let default_upstream = if config.upstream.default_upstream.is_empty() {
+        None
+    } else {
+        Some(config.upstream.default_upstream.clone())
+    };
     let config_cache = Arc::new(ProxyConfigCache::new(
         format!("127.0.0.1:{}", config.server.api_port),
+        default_upstream,
     ));
     load_proxy_config(&proxy_config_service, &config_cache).await?;
 

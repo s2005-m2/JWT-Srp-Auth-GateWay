@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::AppState;
 use crate::error::{AppError, Result};
-use crate::models::{User, UserInfo};
+use crate::models::{User, UserInfo, VerificationCode};
 
 #[derive(Deserialize)]
 pub struct VerifyRequest {
@@ -58,11 +58,11 @@ fn validate_password(password: &str) -> Result<()> {
 }
 
 async fn verify_code(state: &AppState, email: &str, code: &str, code_type: &str) -> Result<bool> {
-    let result = sqlx::query_scalar::<_, i32>(
-        "UPDATE verification_codes SET used = TRUE 
+    let record = sqlx::query_as::<_, VerificationCode>(
+        "SELECT * FROM verification_codes 
          WHERE email = $1 AND code = $2 AND code_type = $3 
          AND expires_at > NOW() AND used = FALSE
-         RETURNING 1"
+         ORDER BY created_at DESC LIMIT 1"
     )
     .bind(email)
     .bind(code)
@@ -70,7 +70,22 @@ async fn verify_code(state: &AppState, email: &str, code: &str, code_type: &str)
     .fetch_optional(state.db_pool.as_ref())
     .await?;
 
-    Ok(result.is_some())
+    if let Some(vc) = record {
+        tracing::debug!(
+            email = %vc.email,
+            code_type = %vc.code_type,
+            expires_at = %vc.expires_at,
+            created_at = %vc.created_at,
+            "Verification code validated"
+        );
+        sqlx::query("UPDATE verification_codes SET used = TRUE WHERE id = $1")
+            .bind(vc.id)
+            .execute(state.db_pool.as_ref())
+            .await?;
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 async fn generate_tokens(state: &AppState, user: &User) -> Result<(String, String)> {

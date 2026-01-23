@@ -21,6 +21,7 @@ pub struct User {
 }
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct VerificationCode {
     pub id: Uuid,
     pub email: String,
@@ -32,6 +33,7 @@ pub struct VerificationCode {
 }
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct RefreshToken {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -69,6 +71,7 @@ pub struct Admin {
 }
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct AdminRegistrationToken {
     pub id: Uuid,
     pub token_hash: String,
@@ -122,6 +125,7 @@ pub struct AdminTokenClaims {
 }
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct SystemConfig {
     pub id: i32,
     pub smtp_host: String,

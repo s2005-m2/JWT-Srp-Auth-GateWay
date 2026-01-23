@@ -180,4 +180,16 @@ impl ProxyHttp for AuthGateway {
         }
         Ok(())
     }
+
+    async fn response_filter(
+        &self,
+        _session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) -> Result<()> {
+        if ctx.should_refresh {
+            upstream_response.insert_header("X-Token-Refresh", "true")?;
+        }
+        Ok(())
+    }
 }

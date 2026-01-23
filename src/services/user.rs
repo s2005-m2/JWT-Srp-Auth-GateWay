@@ -59,6 +59,16 @@ impl UserService {
     pub fn verify_password(&self, user: &User, password: &str) -> Result<bool> {
         verify_password(password, &user.password_hash)
     }
+
+    pub async fn update_password(&self, user_id: Uuid, new_password: &str) -> Result<()> {
+        let password_hash = hash_password(new_password)?;
+        sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&password_hash)
+            .bind(user_id)
+            .execute(self.pool.as_ref())
+            .await?;
+        Ok(())
+    }
 }
 
 fn hash_password(password: &str) -> Result<String> {

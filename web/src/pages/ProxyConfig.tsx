@@ -1,16 +1,76 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Plus, Trash2, Save, Route, Shield, Timer } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { configApi } from '../lib/api';
 
 type ConfigTab = 'routes' | 'jwt' | 'ratelimits';
+
+interface RouteItem {
+  id: string;
+  path_prefix: string;
+  upstream_address: string;
+  require_auth: boolean;
+  enabled: boolean;
+}
+
+interface RateLimitItem {
+  id: string;
+  name: string;
+  path_pattern: string;
+  max_requests: number;
+  window_secs: number;
+  enabled: boolean;
+}
+
+interface JwtConfig {
+  access_token_ttl_secs: number;
+  refresh_token_ttl_secs: number;
+  auto_refresh_threshold_secs: number;
+}
 
 export default function ProxyConfig() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<ConfigTab>('routes');
+  const [routes, setRoutes] = useState<RouteItem[]>([]);
+  const [rateLimits, setRateLimits] = useState<RateLimitItem[]>([]);
+  const [jwtConfig, setJwtConfig] = useState<JwtConfig | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    const [routesRes, limitsRes, jwtRes] = await Promise.all([
+      configApi.listRoutes(),
+      configApi.listRateLimits(),
+      configApi.getJwtConfig(),
+    ]);
+    if (routesRes.data) setRoutes(routesRes.data);
+    if (limitsRes.data) setRateLimits(limitsRes.data);
+    if (jwtRes.data) setJwtConfig(jwtRes.data);
+    setLoading(false);
+  };
+
+  const handleSaveJwt = async () => {
+    if (!jwtConfig) return;
+    await configApi.updateJwtConfig(jwtConfig);
+  };
+
+  const handleDeleteRoute = async (id: string) => {
+    await configApi.deleteRoute(id);
+    setRoutes(routes.filter(r => r.id !== id));
+  };
+
+  const handleDeleteRateLimit = async (id: string) => {
+    await configApi.deleteRateLimit(id);
+    setRateLimits(rateLimits.filter(r => r.id !== id));
+  };
 
   const tabs = [
     { id: 'routes', label: t('proxy.routes'), icon: Route },
@@ -61,26 +121,35 @@ export default function ProxyConfig() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[1, 2].map((i) => (
-                  <div key={i} className="flex items-start space-x-4 p-4 border rounded-lg bg-slate-50/50">
+                {loading && <p className="text-slate-500">Loading...</p>}
+                {routes.map((route) => (
+                  <div key={route.id} className="flex items-start space-x-4 p-4 border rounded-lg bg-slate-50/50">
                     <div className="flex-1 grid grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">{t('proxy.pathPrefix')}</label>
-                        <Input defaultValue={i === 1 ? "/api/" : "/ws/"} />
+                        <Input defaultValue={route.path_prefix} />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">{t('proxy.upstreamAddress')}</label>
-                        <Input defaultValue="127.0.0.1:7000" />
+                        <Input defaultValue={route.upstream_address} />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">{t('proxy.requireAuth')}</label>
-                        <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950">
+                        <select 
+                          className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                          defaultValue={route.require_auth ? 'true' : 'false'}
+                        >
                           <option value="true">{t('common.yes')}</option>
                           <option value="false">{t('common.no')}</option>
                         </select>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteRoute(route.id)}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -96,18 +165,36 @@ export default function ProxyConfig() {
               <CardTitle>{t('proxy.jwtSettings')}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid gap-6 md:grid-cols-3">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">{t('proxy.jwtSecret')}</label>
-                  <Input type="password" value="************************" readOnly />
-                  <p className="text-xs text-slate-500">Secret key used for signing tokens</p>
+                  <label className="text-sm font-medium">Access Token TTL (sec)</label>
+                  <Input 
+                    type="number" 
+                    value={jwtConfig?.access_token_ttl_secs ?? ''} 
+                    onChange={(e) => setJwtConfig(prev => prev ? {...prev, access_token_ttl_secs: Number(e.target.value)} : null)}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">{t('proxy.tokenTTL')}</label>
-                  <Input type="number" defaultValue="3600" />
-                  <p className="text-xs text-slate-500">Token validity duration in seconds</p>
+                  <label className="text-sm font-medium">Refresh Token TTL (sec)</label>
+                  <Input 
+                    type="number" 
+                    value={jwtConfig?.refresh_token_ttl_secs ?? ''} 
+                    onChange={(e) => setJwtConfig(prev => prev ? {...prev, refresh_token_ttl_secs: Number(e.target.value)} : null)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Auto Refresh Threshold (sec)</label>
+                  <Input 
+                    type="number" 
+                    value={jwtConfig?.auto_refresh_threshold_secs ?? ''} 
+                    onChange={(e) => setJwtConfig(prev => prev ? {...prev, auto_refresh_threshold_secs: Number(e.target.value)} : null)}
+                  />
                 </div>
               </div>
+              <Button onClick={handleSaveJwt}>
+                <Save className="w-4 h-4 mr-2" />
+                {t('common.save')}
+              </Button>
             </CardContent>
           </Card>
         )}
@@ -123,23 +210,33 @@ export default function ProxyConfig() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[1].map((i) => (
-                  <div key={i} className="flex items-start space-x-4 p-4 border rounded-lg bg-slate-50/50">
-                    <div className="flex-1 grid grid-cols-3 gap-4">
+                {loading && <p className="text-slate-500">Loading...</p>}
+                {rateLimits.map((item) => (
+                  <div key={item.id} className="flex items-start space-x-4 p-4 border rounded-lg bg-slate-50/50">
+                    <div className="flex-1 grid grid-cols-4 gap-4">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Endpoint Pattern</label>
-                        <Input defaultValue="/api/*" />
+                        <label className="text-sm font-medium">Name</label>
+                        <Input defaultValue={item.name} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Path Pattern</label>
+                        <Input defaultValue={item.path_pattern} />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Limit (req)</label>
-                        <Input type="number" defaultValue="100" />
+                        <Input type="number" defaultValue={item.max_requests} />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Window (sec)</label>
-                        <Input type="number" defaultValue="60" />
+                        <Input type="number" defaultValue={item.window_secs} />
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeleteRateLimit(item.id)}
+                    >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>

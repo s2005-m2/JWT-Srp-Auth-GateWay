@@ -1,5 +1,7 @@
 pub mod admin;
+pub mod admin_auth;
 pub mod login;
+pub mod password_reset;
 pub mod proxy_config;
 pub mod refresh;
 pub mod register;
@@ -8,7 +10,9 @@ pub mod system_config;
 pub mod verify;
 
 pub use admin::*;
+pub use admin_auth::admin_auth_middleware;
 pub use login::login;
+pub use password_reset::{request_password_reset, reset_password};
 pub use proxy_config::*;
 pub use refresh::refresh;
 pub use register::register;

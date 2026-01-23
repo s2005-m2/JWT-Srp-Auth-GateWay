@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { ShieldCheck } from 'lucide-react';
+import { adminApi } from '../lib/api';
 
 type AuthMode = 'login' | 'register';
 
@@ -26,25 +27,18 @@ export default function Login() {
     setError(null);
     
     try {
-      const endpoint = mode === 'login' ? '/api/admin/login' : '/api/admin/register';
-      const body = mode === 'login' 
-        ? { username, password }
-        : { username, password, registration_token: registrationToken };
+      const result = mode === 'login' 
+        ? await adminApi.login(username, password)
+        : await adminApi.register(username, password, registrationToken);
       
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.error?.message || t('common.error'));
+      if (result.error) {
+        throw new Error(result.error.message);
       }
       
-      login(data.access_token);
-      navigate('/');
+      if (result.data) {
+        login(result.data.access_token);
+        navigate('/');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {

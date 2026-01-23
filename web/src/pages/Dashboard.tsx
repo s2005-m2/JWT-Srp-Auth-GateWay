@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Activity, Users, Globe } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { adminApi } from '../lib/api';
 
 interface Stats {
   active_users: number;
@@ -20,7 +20,6 @@ interface ActivityItem {
 
 export default function Dashboard() {
   const { t } = useTranslation();
-  const { token } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,22 +27,18 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const headers = { Authorization: `Bearer ${token}` };
         const [statsRes, activitiesRes] = await Promise.all([
-          fetch('/api/admin/stats', { headers }),
-          fetch('/api/admin/activities', { headers }),
+          adminApi.getStats(),
+          adminApi.getActivities(),
         ]);
-        if (statsRes.ok) setStats(await statsRes.json());
-        if (activitiesRes.ok) {
-          const data = await activitiesRes.json();
-          setActivities(data.activities || []);
-        }
+        if (statsRes.data) setStats(statsRes.data);
+        if (activitiesRes.data) setActivities(activitiesRes.data.activities || []);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [token]);
+  }, []);
 
   const statCards = [
     {

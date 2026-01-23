@@ -4,34 +4,29 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Search, MoreHorizontal, UserPlus } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { adminApi } from '../lib/api';
 
 interface User {
   id: string;
   email: string;
-  status: string;
+  email_verified: boolean;
   created_at: string;
-  last_login: string | null;
 }
 
 export default function Users() {
   const { t } = useTranslation();
-  const { token } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
     const fetchUsers = async () => {
-      const res = await fetch('/api/admin/users', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data.users || []);
+      const res = await adminApi.getUsers();
+      if (res.data) {
+        setUsers(res.data.users || []);
       }
     };
     fetchUsers();
-  }, [token]);
+  }, []);
 
   const filteredUsers = users.filter(u => 
     u.email.toLowerCase().includes(search.toLowerCase())
@@ -70,7 +65,6 @@ export default function Users() {
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Created</th>
-                  <th className="px-4 py-3">Last Login</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -80,18 +74,15 @@ export default function Users() {
                     <td className="px-4 py-3 font-medium">{user.email}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                        user.status === 'Active' 
+                        user.email_verified 
                           ? 'bg-green-50 text-green-700 ring-green-600/20' 
-                          : 'bg-slate-50 text-slate-700 ring-slate-600/20'
+                          : 'bg-yellow-50 text-yellow-700 ring-yellow-600/20'
                       }`}>
-                        {user.status}
+                        {user.email_verified ? 'Verified' : 'Pending'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {new Date(user.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {user.last_login ? new Date(user.last_login).toLocaleDateString() : '-'}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button variant="ghost" size="icon">

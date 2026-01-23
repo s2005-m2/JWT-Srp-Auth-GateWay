@@ -39,6 +39,11 @@ pub async fn login(
         return Err(AppError::InvalidCredentials);
     }
 
+    if !user.email_verified {
+        warn!(email = %req.email, user_id = %user.id, "Login failed: email not verified");
+        return Err(AppError::EmailNotVerified);
+    }
+
     let access = state.token_service.generate_access_token(user.id, &user.email).await?;
     let refresh = state.token_service.generate_refresh_token(user.id).await?;
 

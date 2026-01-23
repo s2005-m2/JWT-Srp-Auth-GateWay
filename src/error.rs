@@ -38,6 +38,7 @@ pub enum AppError {
     EmailExists,
 
     #[error("Rate limit exceeded")]
+    #[allow(dead_code)]
     RateLimited,
 
     #[error("Internal server error")]

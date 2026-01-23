@@ -10,13 +10,15 @@ pub struct CachedRoute {
 pub struct ProxyConfigCache {
     routes: RwLock<Vec<CachedRoute>>,
     auth_upstream: String,
+    default_upstream: Option<String>,
 }
 
 impl ProxyConfigCache {
-    pub fn new(auth_upstream: String) -> Self {
+    pub fn new(auth_upstream: String, default_upstream: Option<String>) -> Self {
         Self {
             routes: RwLock::new(Vec::new()),
             auth_upstream,
+            default_upstream,
         }
     }
 
@@ -49,7 +51,11 @@ impl ProxyConfigCache {
                 });
             }
         }
-        None
+
+        self.default_upstream.as_ref().map(|upstream| MatchedRoute {
+            upstream_address: upstream.clone(),
+            require_auth: false,
+        })
     }
 
     pub fn auth_upstream(&self) -> &str {
