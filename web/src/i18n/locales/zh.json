@@ -1,0 +1,52 @@
+{
+  "common": {
+    "login": "登录",
+    "logout": "退出登录",
+    "dashboard": "仪表盘",
+    "proxyConfig": "代理配置",
+    "users": "用户管理",
+    "settings": "设置",
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "add": "添加",
+    "loading": "加载中...",
+    "success": "成功",
+    "error": "错误",
+    "language": "语言"
+  },
+  "login": {
+    "title": "Arc Auth 管理后台",
+    "username": "用户名",
+    "password": "密码",
+    "submit": "登录",
+    "register": "注册",
+    "registerSubmit": "注册管理员",
+    "registrationToken": "注册令牌",
+    "tokenPlaceholder": "首次启动时生成的一次性令牌",
+    "forgotPassword": "忘记密码？"
+  },
+  "dashboard": {
+    "welcome": "欢迎回来，管理员",
+    "activeUsers": "活跃用户",
+    "totalRequests": "总请求数",
+    "systemStatus": "系统状态",
+    "uptime": "运行时间"
+  },
+  "proxy": {
+    "title": "代理配置",
+    "upstreams": "上游服务器",
+    "routes": "路由规则",
+    "jwtSettings": "JWT 设置",
+    "rateLimits": "速率限制",
+    "addUpstream": "添加上游",
+    "addRoute": "添加路由",
+    "upstreamAddress": "地址",
+    "healthCheck": "健康检查 URL",
+    "pathPrefix": "路径前缀",
+    "target": "目标上游",
+    "jwtSecret": "JWT 密钥",
+    "tokenTTL": "Token 有效期 (秒)"
+  }
+}

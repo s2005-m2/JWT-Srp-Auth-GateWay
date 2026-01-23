@@ -1,0 +1,130 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
+use uuid::Uuid;
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+pub struct User {
+    pub id: Uuid,
+    pub email: String,
+    #[serde(skip_serializing)]
+    pub password_hash: String,
+    pub email_verified: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct VerificationCode {
+    pub id: Uuid,
+    pub email: String,
+    pub code: String,
+    pub code_type: String,
+    pub expires_at: DateTime<Utc>,
+    pub used: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct RefreshToken {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub token_hash: String,
+    pub expires_at: DateTime<Utc>,
+    pub revoked: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AccessTokenClaims {
+    pub sub: Uuid,
+    pub email: String,
+    pub exp: i64,
+    pub iat: i64,
+    pub jti: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RefreshTokenClaims {
+    pub sub: Uuid,
+    pub exp: i64,
+    pub iat: i64,
+    pub jti: Uuid,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+pub struct Admin {
+    pub id: Uuid,
+    pub username: String,
+    #[serde(skip_serializing)]
+    pub password_hash: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct AdminRegistrationToken {
+    pub id: Uuid,
+    pub token_hash: String,
+    pub used: bool,
+    pub used_by: Option<Uuid>,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ProxyUpstream {
+    pub id: Uuid,
+    pub name: String,
+    pub address: String,
+    pub health_check_path: Option<String>,
+    pub health_check_interval_secs: Option<i32>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ProxyRoute {
+    pub id: Uuid,
+    pub path_prefix: String,
+    pub upstream_id: Uuid,
+    pub strip_prefix: bool,
+    pub require_auth: bool,
+    pub priority: i32,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct RateLimitRule {
+    pub id: Uuid,
+    pub name: String,
+    pub path_pattern: String,
+    pub limit_by: String,
+    pub max_requests: i32,
+    pub window_secs: i32,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct JwtConfigRow {
+    pub id: i32,
+    pub access_token_ttl_secs: i32,
+    pub refresh_token_ttl_secs: i32,
+    pub auto_refresh_threshold_secs: i32,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AdminTokenClaims {
+    pub sub: Uuid,
+    pub username: String,
+    pub role: String,
+    pub exp: i64,
+    pub iat: i64,
+    pub jti: Uuid,
+}

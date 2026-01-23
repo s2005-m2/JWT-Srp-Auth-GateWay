@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: docker.xuanyuan.run/postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: arc_auth
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  arc_auth:
+    build: .
+    ports:
+      - "8080:8080"
+      - "3001:3001"
+    environment:
+      - ARC_AUTH__DATABASE__URL=postgres://postgres:postgres@postgres:5432/arc_auth
+      - ARC_AUTH__JWT__SECRET=${JWT_SECRET}
+      - ARC_AUTH__EMAIL__SMTP_HOST=smtp.yeah.net
+      - ARC_AUTH__EMAIL__SMTP_PORT=465
+      - ARC_AUTH__EMAIL__SMTP_USER=arcwhere@yeah.net
+      - ARC_AUTH__EMAIL__SMTP_PASS=${SMTP_PASS}
+      - ARC_AUTH__EMAIL__FROM_EMAIL=arcwhere@yeah.net
+      - ARC_AUTH__EMAIL__FROM_NAME=ARC Platform
+      - ARC_AUTH__UPSTREAM__ARC_GENERATER=arc-generater:7000
+      - RUST_LOG=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./config:/app/config:ro
+
+volumes:
+  postgres_data:
