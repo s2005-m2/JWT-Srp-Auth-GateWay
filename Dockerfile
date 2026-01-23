@@ -1,4 +1,21 @@
-# Build stage
+# Frontend build stage
+FROM docker.xuanyuan.run/node:22-bookworm AS frontend-builder
+
+WORKDIR /app/web
+
+# Copy package files for dependency caching
+COPY web/package.json web/package-lock.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy frontend source
+COPY web ./
+
+# Build frontend
+RUN npm run build
+
+# Rust build stage
 FROM docker.xuanyuan.run/rust:1.85-bookworm AS builder
 
 WORKDIR /app
@@ -24,7 +41,9 @@ RUN cargo update home@0.5.12 --precise 0.5.9 && \
 COPY src ./src
 COPY migrations ./migrations
 COPY config ./config
-COPY web/dist ./web/dist
+
+# Copy built frontend from frontend-builder
+COPY --from=frontend-builder /app/web/dist ./web/dist
 
 # Build the application
 RUN cargo build --release
