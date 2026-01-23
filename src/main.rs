@@ -83,10 +83,10 @@ async fn main() -> anyhow::Result<()> {
     let api_port = config.server.api_port;
     tokio::spawn(async move {
         let app = api::create_router(state);
-        let listener = TcpListener::bind(format!("0.0.0.0:{}", api_port))
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", api_port))
             .await
             .expect("Failed to bind API port");
-        tracing::info!("Auth API listening on 0.0.0.0:{}", api_port);
+        tracing::info!("Auth API listening on 127.0.0.1:{} (internal only)", api_port);
         axum::serve(listener, app).await.expect("API server failed");
     });
 

@@ -174,6 +174,23 @@ impl ProxyHttp for AuthGateway {
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
+        if let Some(ref matched) = ctx.matched_route {
+            if let Some(ref prefix) = matched.strip_prefix {
+                let original_uri = upstream_request.uri.clone();
+                let path = original_uri.path();
+                let new_path = path.strip_prefix(prefix.as_str()).unwrap_or(path);
+                let new_path = if new_path.is_empty() { "/" } else { new_path };
+                
+                let new_uri = if let Some(query) = original_uri.query() {
+                    format!("{}?{}", new_path, query)
+                } else {
+                    new_path.to_string()
+                };
+                
+                upstream_request.set_uri(new_uri.parse().unwrap());
+            }
+        }
+
         upstream_request.insert_header("X-Request-Id", &ctx.request_id)?;
         if let Some(user_id) = &ctx.user_id {
             upstream_request.insert_header("X-User-Id", user_id)?;

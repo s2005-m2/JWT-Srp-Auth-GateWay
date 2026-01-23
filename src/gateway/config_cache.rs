@@ -28,10 +28,20 @@ impl ProxyConfigCache {
     }
 
     pub fn match_route(&self, path: &str) -> Option<MatchedRoute> {
+        if path.starts_with("/arc-admin/") || path == "/arc-admin" {
+            let require_auth = !path.starts_with("/arc-admin/auth/");
+            return Some(MatchedRoute {
+                upstream_address: self.auth_upstream.clone(),
+                require_auth,
+                strip_prefix: Some("/arc-admin".to_string()),
+            });
+        }
+
         if path.starts_with("/auth/") {
             return Some(MatchedRoute {
                 upstream_address: self.auth_upstream.clone(),
                 require_auth: false,
+                strip_prefix: None,
             });
         }
 
@@ -39,6 +49,7 @@ impl ProxyConfigCache {
             return Some(MatchedRoute {
                 upstream_address: self.auth_upstream.clone(),
                 require_auth: true,
+                strip_prefix: None,
             });
         }
 
@@ -48,6 +59,7 @@ impl ProxyConfigCache {
                 return Some(MatchedRoute {
                     upstream_address: route.upstream_address.clone(),
                     require_auth: route.require_auth,
+                    strip_prefix: None,
                 });
             }
         }
@@ -55,6 +67,7 @@ impl ProxyConfigCache {
         self.default_upstream.as_ref().map(|upstream| MatchedRoute {
             upstream_address: upstream.clone(),
             require_auth: false,
+            strip_prefix: None,
         })
     }
 
@@ -67,4 +80,5 @@ impl ProxyConfigCache {
 pub struct MatchedRoute {
     pub upstream_address: String,
     pub require_auth: bool,
+    pub strip_prefix: Option<String>,
 }
