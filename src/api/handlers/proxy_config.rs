@@ -7,75 +7,20 @@ use uuid::Uuid;
 
 use crate::api::AppState;
 use crate::error::Result;
-use crate::models::{JwtConfigRow, ProxyRoute, ProxyUpstream, RateLimitRule};
-
-#[derive(Deserialize)]
-pub struct CreateUpstreamRequest {
-    pub name: String,
-    pub address: String,
-    pub health_check_path: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateUpstreamRequest {
-    pub name: String,
-    pub address: String,
-    pub health_check_path: Option<String>,
-    pub enabled: bool,
-}
-
-pub async fn list_upstreams(State(state): State<AppState>) -> Result<Json<Vec<ProxyUpstream>>> {
-    let upstreams = state.proxy_config_service.list_upstreams().await?;
-    Ok(Json(upstreams))
-}
-
-pub async fn create_upstream(
-    State(state): State<AppState>,
-    Json(req): Json<CreateUpstreamRequest>,
-) -> Result<Json<ProxyUpstream>> {
-    let upstream = state
-        .proxy_config_service
-        .create_upstream(&req.name, &req.address, req.health_check_path.as_deref())
-        .await?;
-    Ok(Json(upstream))
-}
-
-pub async fn update_upstream(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(req): Json<UpdateUpstreamRequest>,
-) -> Result<Json<ProxyUpstream>> {
-    let upstream = state
-        .proxy_config_service
-        .update_upstream(id, &req.name, &req.address, req.health_check_path.as_deref(), req.enabled)
-        .await?;
-    Ok(Json(upstream))
-}
-
-pub async fn delete_upstream(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<()>> {
-    state.proxy_config_service.delete_upstream(id).await?;
-    Ok(Json(()))
-}
+use crate::models::{JwtConfigRow, ProxyRoute, RateLimitRule};
 
 #[derive(Deserialize)]
 pub struct CreateRouteRequest {
     pub path_prefix: String,
-    pub upstream_id: Uuid,
-    pub strip_prefix: bool,
+    pub upstream_address: String,
     pub require_auth: bool,
-    pub priority: i32,
 }
 
 #[derive(Deserialize)]
 pub struct UpdateRouteRequest {
     pub path_prefix: String,
-    pub upstream_id: Uuid,
-    pub strip_prefix: bool,
+    pub upstream_address: String,
     pub require_auth: bool,
-    pub priority: i32,
     pub enabled: bool,
 }
 
@@ -90,7 +35,7 @@ pub async fn create_route(
 ) -> Result<Json<ProxyRoute>> {
     let route = state
         .proxy_config_service
-        .create_route(&req.path_prefix, req.upstream_id, req.strip_prefix, req.require_auth, req.priority)
+        .create_route(&req.path_prefix, &req.upstream_address, req.require_auth)
         .await?;
     Ok(Json(route))
 }
@@ -102,7 +47,7 @@ pub async fn update_route(
 ) -> Result<Json<ProxyRoute>> {
     let route = state
         .proxy_config_service
-        .update_route(id, &req.path_prefix, req.upstream_id, req.strip_prefix, req.require_auth, req.priority, req.enabled)
+        .update_route(id, &req.path_prefix, &req.upstream_address, req.require_auth, req.enabled)
         .await?;
     Ok(Json(route))
 }

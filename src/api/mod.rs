@@ -35,8 +35,6 @@ pub fn create_router(state: AppState) -> Router {
         .route("/activities", get(handlers::get_activities));
 
     let config_routes = Router::new()
-        .route("/upstreams", get(handlers::list_upstreams).post(handlers::create_upstream))
-        .route("/upstreams/{id}", put(handlers::update_upstream).delete(handlers::delete_upstream))
         .route("/routes", get(handlers::list_routes).post(handlers::create_route))
         .route("/routes/{id}", put(handlers::update_route).delete(handlers::delete_route))
         .route("/rate-limits", get(handlers::list_rate_limits).post(handlers::create_rate_limit))

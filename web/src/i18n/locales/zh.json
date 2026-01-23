@@ -14,7 +14,9 @@
     "loading": "加载中...",
     "success": "成功",
     "error": "错误",
-    "language": "语言"
+    "language": "语言",
+    "yes": "是",
+    "no": "否"
   },
   "login": {
     "title": "Arc Auth 管理后台",
@@ -36,16 +38,13 @@
   },
   "proxy": {
     "title": "代理配置",
-    "upstreams": "上游服务器",
     "routes": "路由规则",
     "jwtSettings": "JWT 设置",
     "rateLimits": "速率限制",
-    "addUpstream": "添加上游",
     "addRoute": "添加路由",
-    "upstreamAddress": "地址",
-    "healthCheck": "健康检查 URL",
     "pathPrefix": "路径前缀",
-    "target": "目标上游",
+    "upstreamAddress": "目标地址",
+    "requireAuth": "需要认证",
     "jwtSecret": "JWT 密钥",
     "tokenTTL": "Token 有效期 (秒)"
   }

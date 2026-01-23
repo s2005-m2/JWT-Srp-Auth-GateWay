@@ -1,5 +1,5 @@
 {
-  "common": {
+"common": {
     "login": "Login",
     "logout": "Logout",
     "dashboard": "Dashboard",
@@ -14,39 +14,8 @@
     "loading": "Loading...",
     "success": "Success",
     "error": "Error",
-    "language": "Language"
-  },
-  "login": {
-    "title": "Arc Auth Admin",
-    "username": "Username",
-    "password": "Password",
-    "submit": "Sign In",
-    "register": "Register",
-    "registerSubmit": "Register Admin",
-    "registrationToken": "Registration Token",
-    "tokenPlaceholder": "One-time token generated at startup",
-    "forgotPassword": "Forgot Password?"
-  },
-  "dashboard": {
-    "welcome": "Welcome back, Admin",
-    "activeUsers": "Active Users",
-    "totalRequests": "Total Requests",
-    "systemStatus": "System Status",
-    "uptime": "Uptime"
-  },
-  "proxy": {
-    "title": "Proxy Configuration",
-    "upstreams": "Upstream Servers",
-    "routes": "Routes",
-    "jwtSettings": "JWT Settings",
-    "rateLimits": "Rate Limits",
-    "addUpstream": "Add Upstream",
-    "addRoute": "Add Route",
-    "upstreamAddress": "Address",
-    "healthCheck": "Health Check URL",
-    "pathPrefix": "Path Prefix",
-    "target": "Target Upstream",
-    "jwtSecret": "JWT Secret",
-    "tokenTTL": "Token TTL (seconds)"
+    "language": "Language",
+    "yes": "Yes",
+    "no": "No"
   }
 }

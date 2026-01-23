@@ -4,6 +4,7 @@ use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::prelude::HttpPeer;
 use pingora::proxy::{ProxyHttp, Session};
 use std::sync::Arc;
+use uuid::Uuid;
 
 use super::config_cache::{ProxyConfigCache, MatchedRoute};
 use super::jwt::{JwtError, JwtValidator};
@@ -28,6 +29,7 @@ pub struct AuthGateway {
 
 pub struct RequestCtx {
     pub user_id: Option<String>,
+    pub request_id: String,
     pub should_refresh: bool,
     pub matched_route: Option<MatchedRoute>,
 }
@@ -67,6 +69,7 @@ impl ProxyHttp for AuthGateway {
     fn new_ctx(&self) -> Self::CTX {
         RequestCtx {
             user_id: None,
+            request_id: Uuid::new_v4().to_string(),
             should_refresh: false,
             matched_route: None,
         }
@@ -126,6 +129,7 @@ impl ProxyHttp for AuthGateway {
         upstream_request: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
+        upstream_request.insert_header("X-Request-Id", &ctx.request_id)?;
         if let Some(user_id) = &ctx.user_id {
             upstream_request.insert_header("X-User-Id", user_id)?;
         }

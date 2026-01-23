@@ -3,17 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Plus, Trash2, Save, Server, Route, Shield, Timer } from 'lucide-react';
+import { Plus, Trash2, Save, Route, Shield, Timer } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-type ConfigTab = 'upstreams' | 'routes' | 'jwt' | 'ratelimits';
+type ConfigTab = 'routes' | 'jwt' | 'ratelimits';
 
 export default function ProxyConfig() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<ConfigTab>('upstreams');
+  const [activeTab, setActiveTab] = useState<ConfigTab>('routes');
 
   const tabs = [
-    { id: 'upstreams', label: t('proxy.upstreams'), icon: Server },
     { id: 'routes', label: t('proxy.routes'), icon: Route },
     { id: 'jwt', label: t('proxy.jwtSettings'), icon: Shield },
     { id: 'ratelimits', label: t('proxy.rateLimits'), icon: Timer },
@@ -51,39 +50,6 @@ export default function ProxyConfig() {
       </div>
 
       <div className="space-y-6">
-        {activeTab === 'upstreams' && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>{t('proxy.upstreams')}</CardTitle>
-              <Button size="sm" variant="outline">
-                <Plus className="w-4 h-4 mr-2" />
-                {t('proxy.addUpstream')}
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {[1, 2].map((i) => (
-                  <div key={i} className="flex items-start space-x-4 p-4 border rounded-lg bg-slate-50/50">
-                    <div className="flex-1 grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">{t('proxy.upstreamAddress')}</label>
-                        <Input defaultValue="http://localhost:7000" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">{t('proxy.healthCheck')}</label>
-                        <Input defaultValue="/health" />
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600 hover:bg-red-50">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {activeTab === 'routes' && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -95,18 +61,22 @@ export default function ProxyConfig() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
+                {[1, 2].map((i) => (
                   <div key={i} className="flex items-start space-x-4 p-4 border rounded-lg bg-slate-50/50">
-                    <div className="flex-1 grid grid-cols-2 gap-4">
+                    <div className="flex-1 grid grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">{t('proxy.pathPrefix')}</label>
-                        <Input defaultValue={i === 1 ? "/api" : i === 2 ? "/auth" : "/ws"} />
+                        <Input defaultValue={i === 1 ? "/api/" : "/ws/"} />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">{t('proxy.target')}</label>
+                        <label className="text-sm font-medium">{t('proxy.upstreamAddress')}</label>
+                        <Input defaultValue="127.0.0.1:7000" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">{t('proxy.requireAuth')}</label>
                         <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950">
-                          <option>arc-generater (localhost:7000)</option>
-                          <option>arc-auth (localhost:3001)</option>
+                          <option value="true">{t('common.yes')}</option>
+                          <option value="false">{t('common.no')}</option>
                         </select>
                       </div>
                     </div>

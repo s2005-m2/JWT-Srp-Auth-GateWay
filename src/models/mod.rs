@@ -79,25 +79,11 @@ pub struct AdminRegistrationToken {
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
-pub struct ProxyUpstream {
-    pub id: Uuid,
-    pub name: String,
-    pub address: String,
-    pub health_check_path: Option<String>,
-    pub health_check_interval_secs: Option<i32>,
-    pub enabled: bool,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct ProxyRoute {
     pub id: Uuid,
     pub path_prefix: String,
-    pub upstream_id: Uuid,
-    pub strip_prefix: bool,
+    pub upstream_address: String,
     pub require_auth: bool,
-    pub priority: i32,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

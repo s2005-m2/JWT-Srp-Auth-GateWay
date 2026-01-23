@@ -13,7 +13,7 @@ mod services;
 use api::AppState;
 use config::AppConfig;
 use gateway::{JwtValidator, ProxyConfigCache};
-use gateway::config_cache::{CachedRoute, CachedUpstream};
+use gateway::config_cache::CachedRoute;
 use services::{AdminService, EmailService, ProxyConfigService, TokenService, UserService};
 
 #[tokio::main]
@@ -120,40 +120,19 @@ async fn load_proxy_config(
     service: &ProxyConfigService,
     cache: &ProxyConfigCache,
 ) -> anyhow::Result<()> {
-    let upstreams = service.list_upstreams().await?;
     let routes = service.list_routes().await?;
-
-    let upstream_map: std::collections::HashMap<uuid::Uuid, String> = upstreams
-        .iter()
-        .filter(|u| u.enabled)
-        .map(|u| (u.id, u.address.clone()))
-        .collect();
-
-    let cached_upstreams: Vec<CachedUpstream> = upstreams
-        .into_iter()
-        .filter(|u| u.enabled)
-        .map(|u| CachedUpstream {
-            id: u.id,
-            name: u.name,
-            address: u.address,
-        })
-        .collect();
 
     let cached_routes: Vec<CachedRoute> = routes
         .into_iter()
         .filter(|r| r.enabled)
-        .filter_map(|r| {
-            upstream_map.get(&r.upstream_id).map(|addr| CachedRoute {
-                path_prefix: r.path_prefix,
-                upstream_address: addr.clone(),
-                strip_prefix: r.strip_prefix,
-                require_auth: r.require_auth,
-                priority: r.priority,
-            })
+        .map(|r| CachedRoute {
+            path_prefix: r.path_prefix,
+            upstream_address: r.upstream_address,
+            require_auth: r.require_auth,
         })
         .collect();
 
-    cache.update_config(cached_routes, cached_upstreams);
+    cache.update_routes(cached_routes);
     tracing::info!("Loaded proxy configuration from database");
     Ok(())
 }
