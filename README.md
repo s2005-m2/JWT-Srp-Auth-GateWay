@@ -10,6 +10,7 @@
 - **邮箱注册**: 验证码注册流程
 - **动态路由**: 通过管理后台配置代理路由
 - **安全设计**: Argon2 密码哈希、速率限制、Token Hash 存储
+- **WebSocket/SSE**: 支持长连接代理，连接建立时一次性鉴权
 
 ## 系统架构
 
@@ -118,6 +119,24 @@ Authorization: Bearer <access_token>
 ```
 
 Gateway 验证 JWT 后注入 `X-User-Id` 头到上游服务。
+
+### WebSocket
+
+```javascript
+const ws = new WebSocket('ws://localhost:8080/ws/your-endpoint', {
+  headers: { 'Authorization': 'Bearer <access_token>' }
+});
+```
+
+### SSE
+
+```javascript
+const es = new EventSource('/sse/your-endpoint', {
+  headers: { 'Authorization': 'Bearer <access_token>' }
+});
+```
+
+WebSocket 和 SSE 连接在建立时进行一次 JWT 验证，连接期间不再重复鉴权。
 
 ## 错误码
 

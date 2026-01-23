@@ -4,9 +4,10 @@ use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::prelude::HttpPeer;
 use pingora::proxy::{ProxyHttp, Session};
 use std::sync::Arc;
+use tracing::debug;
 use uuid::Uuid;
 
-use super::config_cache::{ProxyConfigCache, MatchedRoute};
+use super::config_cache::{MatchedRoute, ProxyConfigCache};
 use super::jwt::{JwtError, JwtValidator};
 
 type Result<T> = pingora::Result<T>;
@@ -27,11 +28,19 @@ pub struct AuthGateway {
     config_cache: Arc<ProxyConfigCache>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ConnectionType {
+    Http,
+    WebSocket,
+    Sse,
+}
+
 pub struct RequestCtx {
     pub user_id: Option<String>,
     pub request_id: String,
     pub should_refresh: bool,
     pub matched_route: Option<MatchedRoute>,
+    pub connection_type: ConnectionType,
 }
 
 
@@ -60,6 +69,32 @@ impl AuthGateway {
         let port = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(80);
         (host, port)
     }
+
+    fn detect_connection_type(req: &RequestHeader) -> ConnectionType {
+        let dominated_upgrade = req
+            .headers
+            .get("upgrade")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_lowercase());
+
+        if let Some(upgrade) = dominated_upgrade {
+            if upgrade.contains("websocket") {
+                return ConnectionType::WebSocket;
+            }
+        }
+
+        let accept = req
+            .headers
+            .get("accept")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        if accept.contains("text/event-stream") {
+            return ConnectionType::Sse;
+        }
+
+        ConnectionType::Http
+    }
 }
 
 #[async_trait]
@@ -72,11 +107,21 @@ impl ProxyHttp for AuthGateway {
             request_id: Uuid::new_v4().to_string(),
             should_refresh: false,
             matched_route: None,
+            connection_type: ConnectionType::Http,
         }
     }
 
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
         let path = session.req_header().uri.path();
+        ctx.connection_type = Self::detect_connection_type(session.req_header());
+
+        if ctx.connection_type != ConnectionType::Http {
+            debug!(
+                path = %path,
+                conn_type = ?ctx.connection_type,
+                "Long-lived connection detected, auth will be performed once"
+            );
+        }
 
         let matched = match self.config_cache.match_route(path) {
             Some(r) => r,
