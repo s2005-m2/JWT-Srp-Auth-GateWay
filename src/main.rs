@@ -51,10 +51,27 @@ async fn main() -> anyhow::Result<()> {
     } else {
         Some(config.upstream.default_upstream.clone())
     };
-    let config_cache = Arc::new(ProxyConfigCache::new(
+    let mut config_cache = ProxyConfigCache::new(
         format!("127.0.0.1:{}", config.server.api_port),
         default_upstream,
-    ));
+    );
+
+    let static_routes: Vec<CachedRoute> = config
+        .routing
+        .routes
+        .iter()
+        .map(|r| CachedRoute {
+            path_prefix: r.path.clone(),
+            upstream_address: r.upstream.clone(),
+            require_auth: r.auth,
+        })
+        .collect();
+    if !static_routes.is_empty() {
+        tracing::info!("Loaded {} static routes from config/env", static_routes.len());
+        config_cache.set_static_routes(static_routes);
+    }
+
+    let config_cache = Arc::new(config_cache);
     load_proxy_config(&proxy_config_service, &config_cache).await?;
 
     initialize_admin_token(&admin_service).await?;

@@ -7,6 +7,8 @@ pub struct AppConfig {
     pub upstream: UpstreamConfig,
     pub database: DatabaseConfig,
     pub jwt: JwtConfig,
+    #[serde(default)]
+    pub routing: RoutesConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -18,6 +20,20 @@ pub struct ServerConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpstreamConfig {
     pub default_upstream: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RouteConfig {
+    pub path: String,
+    pub upstream: String,
+    #[serde(default)]
+    pub auth: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct RoutesConfig {
+    #[serde(default)]
+    pub routes: Vec<RouteConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

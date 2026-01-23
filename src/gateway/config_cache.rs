@@ -8,7 +8,8 @@ pub struct CachedRoute {
 }
 
 pub struct ProxyConfigCache {
-    routes: RwLock<Vec<CachedRoute>>,
+    static_routes: Vec<CachedRoute>,
+    dynamic_routes: RwLock<Vec<CachedRoute>>,
     auth_upstream: String,
     default_upstream: Option<String>,
 }
@@ -16,15 +17,20 @@ pub struct ProxyConfigCache {
 impl ProxyConfigCache {
     pub fn new(auth_upstream: String, default_upstream: Option<String>) -> Self {
         Self {
-            routes: RwLock::new(Vec::new()),
+            static_routes: Vec::new(),
+            dynamic_routes: RwLock::new(Vec::new()),
             auth_upstream,
             default_upstream,
         }
     }
 
+    pub fn set_static_routes(&mut self, routes: Vec<CachedRoute>) {
+        self.static_routes = routes;
+    }
+
     pub fn update_routes(&self, routes: Vec<CachedRoute>) {
-        let mut cached_routes = self.routes.write().unwrap();
-        *cached_routes = routes;
+        let mut dynamic = self.dynamic_routes.write().unwrap();
+        *dynamic = routes;
     }
 
     pub fn match_route(&self, path: &str) -> Option<MatchedRoute> {
@@ -63,8 +69,18 @@ impl ProxyConfigCache {
             });
         }
 
-        let routes = self.routes.read().unwrap();
-        for route in routes.iter() {
+        for route in &self.static_routes {
+            if path.starts_with(&route.path_prefix) {
+                return Some(MatchedRoute {
+                    upstream_address: route.upstream_address.clone(),
+                    require_auth: route.require_auth,
+                    strip_prefix: None,
+                });
+            }
+        }
+
+        let dynamic = self.dynamic_routes.read().unwrap();
+        for route in dynamic.iter() {
             if path.starts_with(&route.path_prefix) {
                 return Some(MatchedRoute {
                     upstream_address: route.upstream_address.clone(),

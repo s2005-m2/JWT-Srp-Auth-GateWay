@@ -22,3 +22,13 @@ smtp_user = "user@example.com"
 smtp_pass = "password"
 from_email = "noreply@example.com"
 from_name = "ARC Platform"
+
+[[routing.routes]]
+path = "/api/v1"
+upstream = "127.0.0.1:8000"
+auth = true
+
+[[routing.routes]]
+path = "/public"
+upstream = "127.0.0.1:8001"
+auth = false

@@ -112,6 +112,11 @@ impl ProxyHttp for AuthGateway {
     }
 
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
+        let headers = &session.req_header().headers;
+        if headers.contains_key("x-user-id") || headers.contains_key("x-request-id") {
+            return self.send_error(session, 400, "Reserved header detected").await;
+        }
+
         let path = session.req_header().uri.path();
         ctx.connection_type = Self::detect_connection_type(session.req_header());
 
