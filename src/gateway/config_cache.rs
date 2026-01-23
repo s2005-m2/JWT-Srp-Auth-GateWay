@@ -34,6 +34,7 @@ impl ProxyConfigCache {
 
         if path.starts_with("/arc-admin/") || path == "/arc-admin" {
             let is_public = path.starts_with("/arc-admin/auth/")
+                || path.starts_with("/arc-admin/api/")
                 || path.starts_with("/arc-admin/assets/")
                 || path == "/arc-admin"
                 || path == "/arc-admin/"

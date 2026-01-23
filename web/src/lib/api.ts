@@ -10,6 +10,8 @@ interface ApiResponse<T> {
   error?: ApiError;
 }
 
+const BASE_URL = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+
 let tokenGetter: (() => string | null) | null = null;
 let onUnauthorized: (() => void) | null = null;
 
@@ -36,7 +38,8 @@ export async function api<T>(
   }
 
   try {
-    const res = await fetch(endpoint, {
+    const url = endpoint.startsWith('/') ? `${BASE_URL}${endpoint}` : endpoint;
+    const res = await fetch(url, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
