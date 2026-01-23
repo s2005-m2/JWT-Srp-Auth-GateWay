@@ -9,7 +9,8 @@
 - **自动刷新**: Token 即将过期时自动刷新，无感续期
 - **邮箱注册**: 验证码注册流程
 - **动态路由**: 通过管理后台配置代理路由
-- **安全设计**: Argon2 密码哈希、速率限制、Token Hash 存储
+- **静态路由**: 支持环境变量/配置文件配置路由，优先级高于数据库
+- **安全设计**: Argon2 密码哈希、速率限制、Token Hash 存储、Header 伪造防护
 - **WebSocket/SSE**: 支持长连接代理，连接建立时一次性鉴权
 
 ## 系统架构
@@ -84,6 +85,42 @@ ARC_AUTH__JWT__SECRET="production-secret" cargo run
 | `jwt.secret` | - | JWT 签名密钥 |
 | `jwt.access_token_ttl` | 86400 | Access Token 有效期 (秒) |
 | `jwt.refresh_token_ttl` | 604800 | Refresh Token 有效期 (秒) |
+
+### 静态路由配置
+
+通过配置文件或环境变量配置反向代理路由（优先级高于数据库动态路由）：
+
+**TOML 配置：**
+
+```toml
+[[routing.routes]]
+path = "/api/v1"
+upstream = "127.0.0.1:8000"
+auth = true
+
+[[routing.routes]]
+path = "/public"
+upstream = "127.0.0.1:8001"
+auth = false
+```
+
+**环境变量：**
+
+```bash
+ARC_AUTH__ROUTING__ROUTES__0__PATH=/api/v1
+ARC_AUTH__ROUTING__ROUTES__0__UPSTREAM=127.0.0.1:8000
+ARC_AUTH__ROUTING__ROUTES__0__AUTH=true
+
+ARC_AUTH__ROUTING__ROUTES__1__PATH=/public
+ARC_AUTH__ROUTING__ROUTES__1__UPSTREAM=127.0.0.1:8001
+ARC_AUTH__ROUTING__ROUTES__1__AUTH=false
+```
+
+| 字段 | 说明 |
+|------|------|
+| `path` | 路径前缀匹配 |
+| `upstream` | 上游服务地址 (host:port) |
+| `auth` | 是否需要 JWT 鉴权 (默认 false) |
 
 ## API 文档
 
@@ -161,6 +198,7 @@ WebSocket 和 SSE 连接在建立时进行一次 JWT 验证，连接期间不再
 | `EMAIL_NOT_VERIFIED` | 403 | 邮箱未验证 |
 | `EMAIL_EXISTS` | 409 | 邮箱已存在 |
 | `RATE_LIMITED` | 429 | 请求频率超限 |
+| `RESERVED_HEADER` | 400 | 请求包含保留 Header (X-User-Id/X-Request-Id) |
 
 ## 开发
 
