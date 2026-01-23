@@ -58,7 +58,7 @@ fn validate_password(password: &str) -> Result<()> {
 }
 
 async fn verify_code(state: &AppState, email: &str, code: &str, code_type: &str) -> Result<bool> {
-    let result = sqlx::query_scalar::<_, i64>(
+    let result = sqlx::query_scalar::<_, i32>(
         "UPDATE verification_codes SET used = TRUE 
          WHERE email = $1 AND code = $2 AND code_type = $3 
          AND expires_at > NOW() AND used = FALSE
