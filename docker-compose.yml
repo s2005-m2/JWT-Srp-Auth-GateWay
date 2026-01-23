@@ -19,7 +19,6 @@ services:
     build: .
     ports:
       - "8080:8080"
-      - "3001:3001"
     environment:
       - ARC_AUTH__DATABASE__URL=postgres://postgres:postgres@postgres:5432/arc_auth
       - ARC_AUTH__JWT__SECRET=${JWT_SECRET}

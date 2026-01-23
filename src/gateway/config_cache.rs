@@ -28,11 +28,20 @@ impl ProxyConfigCache {
     }
 
     pub fn match_route(&self, path: &str) -> Option<MatchedRoute> {
+        if path.starts_with("/.well-known/") {
+            return None;
+        }
+
         if path.starts_with("/arc-admin/") || path == "/arc-admin" {
-            let require_auth = !path.starts_with("/arc-admin/auth/");
+            let is_public = path.starts_with("/arc-admin/auth/")
+                || path.starts_with("/arc-admin/assets/")
+                || path == "/arc-admin"
+                || path == "/arc-admin/"
+                || path.ends_with(".svg")
+                || path.ends_with(".ico");
             return Some(MatchedRoute {
                 upstream_address: self.auth_upstream.clone(),
-                require_auth,
+                require_auth: !is_public,
                 strip_prefix: Some("/arc-admin".to_string()),
             });
         }
