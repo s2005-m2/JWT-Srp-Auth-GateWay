@@ -1,34 +1,73 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Activity, Users, Globe, Clock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+
+interface Stats {
+  active_users: number;
+  total_requests: number;
+  system_status: string;
+  uptime_percent: number;
+}
+
+interface ActivityItem {
+  id: string;
+  action: string;
+  email: string;
+  status: string;
+  created_at: string;
+}
 
 export default function Dashboard() {
   const { t } = useTranslation();
+  const { token } = useAuth();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const stats = [
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+        const [statsRes, activitiesRes] = await Promise.all([
+          fetch('/api/admin/stats', { headers }),
+          fetch('/api/admin/activities', { headers }),
+        ]);
+        if (statsRes.ok) setStats(await statsRes.json());
+        if (activitiesRes.ok) {
+          const data = await activitiesRes.json();
+          setActivities(data.activities || []);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [token]);
+
+  const statCards = [
     {
       title: t('dashboard.activeUsers'),
-      value: "1,234",
+      value: stats?.active_users?.toLocaleString() ?? '-',
       icon: Users,
-      change: "+12%",
       color: "text-blue-600"
     },
     {
       title: t('dashboard.totalRequests'),
-      value: "843.2K",
+      value: stats?.total_requests?.toLocaleString() ?? '-',
       icon: Globe,
-      change: "+5.4%",
       color: "text-green-600"
     },
     {
       title: t('dashboard.systemStatus'),
-      value: "Healthy",
+      value: stats?.system_status ?? '-',
       icon: Activity,
       color: "text-emerald-600"
     },
     {
       title: t('dashboard.uptime'),
-      value: "99.9%",
+      value: stats ? `${stats.uptime_percent}%` : '-',
       icon: Clock,
       color: "text-indigo-600"
     }
@@ -44,7 +83,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, index) => {
+        {statCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
             <Card key={index}>
@@ -55,12 +94,7 @@ export default function Dashboard() {
                 <Icon className={`h-4 w-4 ${stat.color}`} />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                {stat.change && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    <span className="text-green-600 font-medium">{stat.change}</span> from last month
-                  </p>
-                )}
+                <div className="text-2xl font-bold">{loading ? '...' : stat.value}</div>
               </CardContent>
             </Card>
           );
@@ -84,16 +118,19 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-8">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center">
+              {activities.length === 0 && !loading && (
+                <p className="text-sm text-slate-500">No recent activity</p>
+              )}
+              {activities.slice(0, 5).map((item) => (
+                <div key={item.id} className="flex items-center">
                   <div className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center">
                     <Activity className="h-4 w-4 text-slate-500" />
                   </div>
                   <div className="ml-4 space-y-1">
-                    <p className="text-sm font-medium leading-none">New user registered</p>
-                    <p className="text-xs text-slate-500">2 minutes ago</p>
+                    <p className="text-sm font-medium leading-none">{item.action}</p>
+                    <p className="text-xs text-slate-500">{item.email}</p>
                   </div>
-                  <div className="ml-auto font-medium text-sm text-green-600">Success</div>
+                  <div className="ml-auto font-medium text-sm text-green-600">{item.status}</div>
                 </div>
               ))}
             </div>

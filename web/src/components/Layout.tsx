@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Server, Users, LogOut } from 'lucide-react';
+import { LayoutDashboard, Server, Users, LogOut, FlaskConical } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Button } from './ui/Button';
 import { LanguageToggle } from './LanguageToggle';
@@ -15,6 +15,7 @@ export function Layout() {
     { href: '/', icon: LayoutDashboard, label: t('common.dashboard') },
     { href: '/proxy', icon: Server, label: t('common.proxyConfig') },
     { href: '/users', icon: Users, label: t('common.users') },
+    { href: '/auth-test', icon: FlaskConical, label: 'Auth Test' },
   ];
 
   return (

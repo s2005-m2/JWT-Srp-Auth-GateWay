@@ -24,7 +24,10 @@ pub fn create_router(state: AppState) -> Router {
 
     let admin_routes = Router::new()
         .route("/login", post(handlers::admin_login))
-        .route("/register", post(handlers::admin_register));
+        .route("/register", post(handlers::admin_register))
+        .route("/stats", get(handlers::get_stats))
+        .route("/users", get(handlers::get_users))
+        .route("/activities", get(handlers::get_activities));
 
     let config_routes = Router::new()
         .route("/upstreams", get(handlers::list_upstreams).post(handlers::create_upstream))

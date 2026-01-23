@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ProxyConfig from './pages/ProxyConfig';
 import Users from './pages/Users';
+import AuthTest from './pages/AuthTest';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="proxy" element={<ProxyConfig />} />
             <Route path="users" element={<Users />} />
+            <Route path="auth-test" element={<AuthTest />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
