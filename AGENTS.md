@@ -1,3 +1,5 @@
+> 📍 子系统文档，全局架构见 [根 AGENTS.md](../AGENTS.md)
+
 # ARC_AUTH KNOWLEDGE BASE
 
 **Updated:** 2026-01-24
