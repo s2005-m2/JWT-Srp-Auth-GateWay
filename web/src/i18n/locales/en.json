@@ -1,5 +1,5 @@
 {
-"common": {
+  "common": {
     "login": "Login",
     "logout": "Logout",
     "dashboard": "Dashboard",
@@ -16,6 +16,56 @@
     "error": "Error",
     "language": "Language",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "confirm": "Confirm",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "login": {
+    "title": "Arc Auth Admin",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Login",
+    "register": "Register",
+    "registerSubmit": "Register Admin",
+    "registrationToken": "Registration Token",
+    "tokenPlaceholder": "One-time token generated on first startup",
+    "forgotPassword": "Forgot password?"
+  },
+  "dashboard": {
+    "welcome": "Welcome back, Admin",
+    "activeUsers": "Active Users",
+    "totalRequests": "Total Requests",
+    "systemStatus": "System Status",
+    "uptime": "Uptime"
+  },
+  "proxy": {
+    "title": "Proxy Configuration",
+    "routes": "Routes",
+    "jwtSettings": "JWT Settings",
+    "rateLimits": "Rate Limits",
+    "smtp": "SMTP",
+    "addRoute": "Add Route",
+    "pathPrefix": "Path Prefix",
+    "upstreamAddress": "Upstream Address",
+    "requireAuth": "Require Auth",
+    "stripPrefix": "Strip Prefix",
+    "stripPrefixHint": "Remove this prefix before forwarding",
+    "jwtSecret": "JWT Secret",
+    "tokenTTL": "Token TTL (sec)",
+    "accessTokenTTL": "Access Token TTL",
+    "refreshTokenTTL": "Refresh Token TTL",
+    "autoRefreshThreshold": "Auto Refresh Threshold",
+    "smtpHost": "SMTP Host",
+    "smtpPort": "SMTP Port",
+    "smtpUser": "SMTP User",
+    "smtpPass": "SMTP Password",
+    "fromEmail": "From Email",
+    "fromName": "From Name",
+    "testEmail": "Test Email",
+    "name": "Name",
+    "pathPattern": "Path Pattern",
+    "maxRequests": "Max Requests",
+    "windowSecs": "Window (sec)"
   }
 }

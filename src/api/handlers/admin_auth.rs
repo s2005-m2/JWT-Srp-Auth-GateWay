@@ -49,7 +49,8 @@ pub async fn admin_auth_middleware(
 
     let claims = match state.admin_service.validate_admin_jwt(token).await {
         Ok(c) => c,
-        Err(_) => {
+        Err(e) => {
+            tracing::warn!("Admin JWT validation failed: {}", e);
             return (
                 StatusCode::UNAUTHORIZED,
                 Json(AuthError {

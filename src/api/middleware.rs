@@ -25,6 +25,7 @@ struct RateLimiterInner {
     windows: Mutex<HashMap<String, Vec<Instant>>>,
     max_requests: usize,
     window_duration: Duration,
+    last_cleanup: Mutex<Instant>,
 }
 
 impl RateLimiter {
@@ -34,13 +35,19 @@ impl RateLimiter {
                 windows: Mutex::new(HashMap::new()),
                 max_requests,
                 window_duration: Duration::from_secs(window_secs),
+                last_cleanup: Mutex::new(Instant::now()),
             }),
         }
     }
 
     pub fn check(&self, key: &str) -> bool {
         let now = Instant::now();
-        let mut windows = self.inner.windows.lock().unwrap();
+        self.maybe_cleanup(now);
+        
+        let mut windows = match self.inner.windows.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
 
         let timestamps = windows.entry(key.to_string()).or_default();
         timestamps.retain(|t| now.duration_since(*t) < self.inner.window_duration);
@@ -51,6 +58,43 @@ impl RateLimiter {
 
         timestamps.push(now);
         true
+    }
+    
+    fn maybe_cleanup(&self, now: Instant) {
+        let cleanup_interval = Duration::from_secs(60);
+        
+        let should_cleanup = {
+            let last = match self.inner.last_cleanup.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            now.duration_since(*last) > cleanup_interval
+        };
+        
+        if !should_cleanup {
+            return;
+        }
+        
+        let mut last = match self.inner.last_cleanup.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        
+        if now.duration_since(*last) <= cleanup_interval {
+            return;
+        }
+        *last = now;
+        drop(last);
+        
+        let mut windows = match self.inner.windows.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        
+        windows.retain(|_, timestamps| {
+            timestamps.retain(|t| now.duration_since(*t) < self.inner.window_duration);
+            !timestamps.is_empty()
+        });
     }
 }
 
@@ -70,12 +114,7 @@ pub async fn rate_limit_middleware(
     next: Next,
     rate_limiter: RateLimiter,
 ) -> Response {
-    let key = request
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+    let key = extract_client_ip(&request);
 
     if !rate_limiter.check(&key) {
         return (
@@ -91,6 +130,15 @@ pub async fn rate_limit_middleware(
     }
 
     next.run(request).await
+}
+
+fn extract_client_ip(request: &Request) -> String {
+    request
+        .headers()
+        .get("x-real-ip")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "127.0.0.1".to_string())
 }
 
 pub async fn request_counter_middleware(

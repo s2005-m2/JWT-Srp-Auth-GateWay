@@ -102,15 +102,6 @@ impl AdminService {
         Ok(token)
     }
 
-    pub async fn has_valid_registration_token(&self) -> Result<bool> {
-        let count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*)::BIGINT FROM admin_registration_tokens WHERE used = FALSE AND expires_at > NOW()"
-        )
-        .fetch_one(self.pool.as_ref())
-        .await?;
-        Ok(count.0 > 0)
-    }
-
     pub async fn generate_admin_jwt(&self, admin: &Admin) -> Result<String> {
         use jsonwebtoken::{encode, EncodingKey, Header};
         

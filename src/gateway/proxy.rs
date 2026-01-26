@@ -4,7 +4,7 @@ use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::prelude::HttpPeer;
 use pingora::proxy::{ProxyHttp, Session};
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use super::config_cache::{MatchedRoute, ProxyConfigCache};
@@ -14,10 +14,11 @@ type Result<T> = pingora::Result<T>;
 
 impl AuthGateway {
     async fn send_error(&self, session: &mut Session, status: u16, msg: &str) -> Result<bool> {
+        let body = format!(r#"{{"error":{{"code":"{}","message":"{}"}}}}"#, status, msg);
         let mut header = ResponseHeader::build(status, None)?;
         header.insert_header("Content-Type", "application/json")?;
-        let body = format!(r#"{{"error":{{"code":"{}","message":"{}"}}}}"#, status, msg);
-        session.write_response_header(Box::new(header), false).await?;
+        header.insert_header("Content-Length", body.len().to_string())?;
+        session.write_response_header(Box::new(header), true).await?;
         session.write_response_body(Some(body.into()), true).await?;
         Ok(true)
     }
@@ -112,12 +113,21 @@ impl ProxyHttp for AuthGateway {
     }
 
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
+        let method = session.req_header().method.as_str();
+        let path = session.req_header().uri.path();
+        let query = session.req_header().uri.query().unwrap_or("");
+        
         let headers = &session.req_header().headers;
         if headers.contains_key("x-user-id") || headers.contains_key("x-request-id") {
+            warn!(
+                req_id = %ctx.request_id,
+                method = %method,
+                path = %path,
+                "Rejected: reserved header detected"
+            );
             return self.send_error(session, 400, "Reserved header detected").await;
         }
 
-        let path = session.req_header().uri.path();
         ctx.connection_type = Self::detect_connection_type(session.req_header());
 
         if ctx.connection_type != ConnectionType::Http {
@@ -130,21 +140,59 @@ impl ProxyHttp for AuthGateway {
 
         let matched = match self.config_cache.match_route(path) {
             Some(r) => r,
-            None => return self.send_error(session, 404, "Not found").await,
+            None => {
+                warn!(
+                    req_id = %ctx.request_id,
+                    method = %method,
+                    path = %path,
+                    "No route matched"
+                );
+                return self.send_error(session, 404, "Not found").await;
+            }
         };
+
+        info!(
+            req_id = %ctx.request_id,
+            method = %method,
+            path = %path,
+            query = %query,
+            upstream = %matched.upstream_address,
+            auth = %matched.require_auth,
+            "Request received"
+        );
 
         if matched.require_auth {
             let token = match Self::extract_bearer_token(session.req_header()) {
                 Some(t) => t,
-                None => return self.send_error(session, 401, "Missing token").await,
+                None => {
+                    warn!(
+                        req_id = %ctx.request_id,
+                        method = %method,
+                        path = %path,
+                        "Auth failed: missing token"
+                    );
+                    return self.send_error(session, 401, "Missing token").await;
+                }
             };
 
             let claims = match self.jwt_validator.validate(token).await {
                 Ok(c) => c,
                 Err(JwtError::Expired) => {
+                    warn!(
+                        req_id = %ctx.request_id,
+                        method = %method,
+                        path = %path,
+                        "Auth failed: token expired"
+                    );
                     return self.send_error(session, 401, "Token expired").await;
                 }
                 Err(JwtError::Invalid) => {
+                    warn!(
+                        req_id = %ctx.request_id,
+                        method = %method,
+                        path = %path,
+                        "Auth failed: invalid token"
+                    );
                     return self.send_error(session, 401, "Invalid token").await;
                 }
             };
@@ -183,16 +231,35 @@ impl ProxyHttp for AuthGateway {
             if let Some(ref prefix) = matched.strip_prefix {
                 let original_uri = upstream_request.uri.clone();
                 let path = original_uri.path();
-                let new_path = path.strip_prefix(prefix.as_str()).unwrap_or(path);
-                let new_path = if new_path.is_empty() { "/" } else { new_path };
+                let stripped = path.strip_prefix(prefix.as_str()).unwrap_or(path);
                 
-                let new_uri = if let Some(query) = original_uri.query() {
-                    format!("{}?{}", new_path, query)
+                let new_path = if stripped.is_empty() || !stripped.starts_with('/') {
+                    format!("/{}", stripped.trim_start_matches('/'))
                 } else {
-                    new_path.to_string()
+                    stripped.to_string()
+                };
+                let new_path = if new_path.is_empty() { "/".to_string() } else { new_path };
+                
+                let path_and_query = match original_uri.query() {
+                    Some(q) => format!("{}?{}", new_path, q),
+                    None => new_path,
                 };
                 
-                upstream_request.set_uri(new_uri.parse().unwrap());
+                match http::Uri::builder().path_and_query(path_and_query.as_str()).build() {
+                    Ok(uri) => upstream_request.set_uri(uri),
+                    Err(e) => {
+                        warn!(
+                            req_id = %ctx.request_id,
+                            original_path = %path,
+                            attempted = %path_and_query,
+                            error = %e,
+                            "Failed to build URI, using root"
+                        );
+                        if let Ok(uri) = http::Uri::builder().path_and_query("/").build() {
+                            upstream_request.set_uri(uri);
+                        }
+                    }
+                }
             }
         }
 
@@ -209,6 +276,13 @@ impl ProxyHttp for AuthGateway {
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
+        let status = upstream_response.status.as_u16();
+        info!(
+            req_id = %ctx.request_id,
+            status = %status,
+            "Response"
+        );
+        
         if ctx.should_refresh {
             upstream_response.insert_header("X-Token-Refresh", "true")?;
         }

@@ -46,17 +46,6 @@ cp config/default.toml config/local.toml
 ```toml
 [database]
 url = "postgres://user:password@localhost:5432/arc_auth"
-
-[jwt]
-secret = "your-secure-secret-key-at-least-32-chars"
-
-[email]
-smtp_host = "smtp.your-provider.com"
-smtp_port = 587
-smtp_user = "your-email@example.com"
-smtp_pass = "your-smtp-password"
-from_email = "noreply@your-domain.com"
-from_name = "Your Platform"
 ```
 
 ### 3. 运行
@@ -71,20 +60,15 @@ cargo run
 
 ## 配置说明
 
-环境变量覆盖格式：`ARC_AUTH__<SECTION>__<KEY>`
-
-```bash
-ARC_AUTH__JWT__SECRET="production-secret" cargo run
-```
-
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `server.gateway_port` | 8080 | Gateway 端口 |
 | `server.api_port` | 3001 | Auth API 端口 |
 | `database.url` | - | PostgreSQL 连接串 |
-| `jwt.secret` | - | JWT 签名密钥 |
 | `jwt.access_token_ttl` | 86400 | Access Token 有效期 (秒) |
 | `jwt.refresh_token_ttl` | 604800 | Refresh Token 有效期 (秒) |
+
+> **注意**: JWT Secret 和 SMTP 配置通过管理后台在数据库中管理，首次启动时自动生成。
 
 ### 静态路由配置
 

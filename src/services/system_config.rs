@@ -65,7 +65,9 @@ impl SystemConfigService {
         }
         self.reload_cache().await?;
         let cache = self.cache.read().await;
-        Ok(cache.as_ref().unwrap().clone())
+        cache.as_ref().cloned().ok_or_else(|| {
+            crate::error::AppError::Internal(anyhow::anyhow!("Failed to load system config"))
+        })
     }
 
     pub async fn get_smtp_config(&self) -> Result<SmtpConfig> {

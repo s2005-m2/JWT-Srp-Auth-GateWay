@@ -5,7 +5,7 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use middleware::{rate_limit_middleware, request_counter_middleware, RateLimiter};
 
-use crate::gateway::JwtValidator;
+use crate::gateway::{JwtValidator, ProxyConfigCache};
 use crate::services::{AdminService, EmailService, ProxyConfigService, SystemConfigService, TokenService, UserService};
 
 pub mod handlers;
@@ -21,6 +21,7 @@ pub struct AppState {
     pub proxy_config_service: Arc<ProxyConfigService>,
     pub system_config_service: Arc<SystemConfigService>,
     pub jwt_validator: Option<Arc<JwtValidator>>,
+    pub config_cache: Option<Arc<ProxyConfigCache>>,
     pub request_counter: Arc<AtomicU64>,
 }
 
@@ -47,9 +48,9 @@ pub fn create_router(state: AppState) -> Router {
 
     let config_routes = Router::new()
         .route("/routes", get(handlers::list_routes).post(handlers::create_route))
-        .route("/routes/{id}", put(handlers::update_route).delete(handlers::delete_route))
+        .route("/routes/:id", put(handlers::update_route).delete(handlers::delete_route))
         .route("/rate-limits", get(handlers::list_rate_limits).post(handlers::create_rate_limit))
-        .route("/rate-limits/{id}", put(handlers::update_rate_limit).delete(handlers::delete_rate_limit))
+        .route("/rate-limits/:id", put(handlers::update_rate_limit).delete(handlers::delete_rate_limit))
         .route("/jwt", get(handlers::get_jwt_config).put(handlers::update_jwt_config))
         .route("/smtp", get(handlers::get_smtp_config).put(handlers::update_smtp_config))
         .route("/jwt-secret", get(handlers::get_jwt_secret_info).post(handlers::rotate_jwt_secret))

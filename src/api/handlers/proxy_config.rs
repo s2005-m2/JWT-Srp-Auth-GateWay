@@ -7,13 +7,34 @@ use uuid::Uuid;
 
 use crate::api::AppState;
 use crate::error::Result;
+use crate::gateway::config_cache::CachedRoute;
 use crate::models::{JwtConfigRow, ProxyRoute, RateLimitRule};
+
+async fn refresh_route_cache(state: &AppState) {
+    if let Some(ref cache) = state.config_cache {
+        if let Ok(routes) = state.proxy_config_service.list_routes().await {
+            let cached: Vec<CachedRoute> = routes
+                .into_iter()
+                .filter(|r| r.enabled)
+                .map(|r| CachedRoute {
+                    path_prefix: r.path_prefix,
+                    upstream_address: r.upstream_address,
+                    require_auth: r.require_auth,
+                    strip_prefix: r.strip_prefix,
+                })
+                .collect();
+            cache.update_routes(cached);
+            tracing::info!("Route cache refreshed");
+        }
+    }
+}
 
 #[derive(Deserialize)]
 pub struct CreateRouteRequest {
     pub path_prefix: String,
     pub upstream_address: String,
     pub require_auth: bool,
+    pub strip_prefix: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -21,6 +42,7 @@ pub struct UpdateRouteRequest {
     pub path_prefix: String,
     pub upstream_address: String,
     pub require_auth: bool,
+    pub strip_prefix: Option<String>,
     pub enabled: bool,
 }
 
@@ -35,8 +57,14 @@ pub async fn create_route(
 ) -> Result<Json<ProxyRoute>> {
     let route = state
         .proxy_config_service
-        .create_route(&req.path_prefix, &req.upstream_address, req.require_auth)
+        .create_route(
+            &req.path_prefix,
+            &req.upstream_address,
+            req.require_auth,
+            req.strip_prefix.as_deref(),
+        )
         .await?;
+    refresh_route_cache(&state).await;
     Ok(Json(route))
 }
 
@@ -47,8 +75,16 @@ pub async fn update_route(
 ) -> Result<Json<ProxyRoute>> {
     let route = state
         .proxy_config_service
-        .update_route(id, &req.path_prefix, &req.upstream_address, req.require_auth, req.enabled)
+        .update_route(
+            id,
+            &req.path_prefix,
+            &req.upstream_address,
+            req.require_auth,
+            req.strip_prefix.as_deref(),
+            req.enabled,
+        )
         .await?;
+    refresh_route_cache(&state).await;
     Ok(Json(route))
 }
 
@@ -57,6 +93,7 @@ pub async fn delete_route(
     Path(id): Path<Uuid>,
 ) -> Result<Json<()>> {
     state.proxy_config_service.delete_route(id).await?;
+    refresh_route_cache(&state).await;
     Ok(Json(()))
 }
 

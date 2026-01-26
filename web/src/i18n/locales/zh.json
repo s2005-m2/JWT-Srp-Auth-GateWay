@@ -16,7 +16,10 @@
     "error": "错误",
     "language": "语言",
     "yes": "是",
-    "no": "否"
+    "no": "否",
+    "confirm": "确认",
+    "enabled": "启用",
+    "disabled": "禁用"
   },
   "login": {
     "title": "Arc Auth 管理后台",
@@ -41,11 +44,28 @@
     "routes": "路由规则",
     "jwtSettings": "JWT 设置",
     "rateLimits": "速率限制",
+    "smtp": "邮件服务",
     "addRoute": "添加路由",
     "pathPrefix": "路径前缀",
     "upstreamAddress": "目标地址",
     "requireAuth": "需要认证",
+    "stripPrefix": "剥离前缀",
+    "stripPrefixHint": "转发前移除此前缀",
     "jwtSecret": "JWT 密钥",
-    "tokenTTL": "Token 有效期 (秒)"
+    "tokenTTL": "Token 有效期 (秒)",
+    "accessTokenTTL": "Access Token 有效期",
+    "refreshTokenTTL": "Refresh Token 有效期",
+    "autoRefreshThreshold": "自动刷新阈值",
+    "smtpHost": "SMTP 主机",
+    "smtpPort": "SMTP 端口",
+    "smtpUser": "SMTP 用户",
+    "smtpPass": "SMTP 密码",
+    "fromEmail": "发件邮箱",
+    "fromName": "发件人名称",
+    "testEmail": "测试邮件",
+    "name": "名称",
+    "pathPattern": "路径模式",
+    "maxRequests": "最大请求数",
+    "windowSecs": "时间窗口 (秒)"
   }
 }

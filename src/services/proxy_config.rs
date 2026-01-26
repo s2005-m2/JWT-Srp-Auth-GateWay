@@ -28,14 +28,16 @@ impl ProxyConfigService {
         path_prefix: &str,
         upstream_address: &str,
         require_auth: bool,
+        strip_prefix: Option<&str>,
     ) -> Result<ProxyRoute> {
         let route = sqlx::query_as::<_, ProxyRoute>(
-            "INSERT INTO proxy_routes (path_prefix, upstream_address, require_auth) 
-             VALUES ($1, $2, $3) RETURNING *"
+            "INSERT INTO proxy_routes (path_prefix, upstream_address, require_auth, strip_prefix) 
+             VALUES ($1, $2, $3, $4) RETURNING *"
         )
         .bind(path_prefix)
         .bind(upstream_address)
         .bind(require_auth)
+        .bind(strip_prefix)
         .fetch_one(self.pool.as_ref())
         .await?;
         Ok(route)
@@ -47,17 +49,19 @@ impl ProxyConfigService {
         path_prefix: &str,
         upstream_address: &str,
         require_auth: bool,
+        strip_prefix: Option<&str>,
         enabled: bool,
     ) -> Result<ProxyRoute> {
         let route = sqlx::query_as::<_, ProxyRoute>(
             "UPDATE proxy_routes SET path_prefix = $2, upstream_address = $3, 
-             require_auth = $4, enabled = $5, updated_at = NOW() 
+             require_auth = $4, strip_prefix = $5, enabled = $6, updated_at = NOW() 
              WHERE id = $1 RETURNING *"
         )
         .bind(id)
         .bind(path_prefix)
         .bind(upstream_address)
         .bind(require_auth)
+        .bind(strip_prefix)
         .bind(enabled)
         .fetch_one(self.pool.as_ref())
         .await?;

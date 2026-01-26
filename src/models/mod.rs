@@ -87,6 +87,7 @@ pub struct ProxyRoute {
     pub path_prefix: String,
     pub upstream_address: String,
     pub require_auth: bool,
+    pub strip_prefix: Option<String>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

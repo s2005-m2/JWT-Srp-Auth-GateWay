@@ -64,6 +64,7 @@ async fn main() -> anyhow::Result<()> {
             path_prefix: r.path.clone(),
             upstream_address: r.upstream.clone(),
             require_auth: r.auth,
+            strip_prefix: r.strip_prefix.clone(),
         })
         .collect();
     if !static_routes.is_empty() {
@@ -90,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
         proxy_config_service,
         system_config_service,
         jwt_validator: Some(jwt_validator.clone()),
+        config_cache: Some(config_cache.clone()),
         request_counter,
     };
 
@@ -97,14 +99,16 @@ async fn main() -> anyhow::Result<()> {
         jwt_rotation_scheduler(system_config_for_scheduler, jwt_validator_for_scheduler).await;
     });
 
+    let db_pool_for_cleanup = db_pool.clone();
+    tokio::spawn(async move {
+        database_cleanup_scheduler(db_pool_for_cleanup).await;
+    });
+
     let api_port = config.server.api_port;
     tokio::spawn(async move {
-        let app = api::create_router(state);
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", api_port))
-            .await
-            .expect("Failed to bind API port");
-        tracing::info!("Auth API listening on 127.0.0.1:{} (internal only)", api_port);
-        axum::serve(listener, app).await.expect("API server failed");
+        if let Err(e) = run_api_server(state, api_port).await {
+            tracing::error!("API server failed: {}", e);
+        }
     });
 
     tracing::info!("Starting Pingora gateway on 0.0.0.0:{}", config.server.gateway_port);
@@ -128,11 +132,18 @@ fn init_logging() {
         .init();
 }
 
+async fn run_api_server(state: AppState, port: u16) -> anyhow::Result<()> {
+    let app = api::create_router(state);
+    let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
+    tracing::info!("Auth API listening on 127.0.0.1:{} (internal only)", port);
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+
 async fn initialize_admin_token(admin_service: &AdminService) -> anyhow::Result<()> {
     let admin_count = admin_service.count().await?;
-    let has_valid_token = admin_service.has_valid_registration_token().await?;
 
-    if admin_count == 0 && !has_valid_token {
+    if admin_count == 0 {
         let token = admin_service.generate_registration_token().await?;
         tracing::info!("========================================");
         tracing::info!("NO ADMIN FOUND - REGISTRATION TOKEN GENERATED");
@@ -149,7 +160,13 @@ fn start_gateway(config: Arc<AppConfig>, jwt_validator: Arc<JwtValidator>, confi
     use pingora::proxy::http_proxy_service;
     use gateway::proxy::AuthGateway;
 
-    let mut server = Server::new(None).expect("Failed to create server");
+    let mut server = match Server::new(None) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("Failed to create Pingora server: {}", e);
+            return;
+        }
+    };
     server.bootstrap();
 
     let gateway = AuthGateway::new(jwt_validator, config_cache);
@@ -174,12 +191,52 @@ async fn load_proxy_config(
             path_prefix: r.path_prefix,
             upstream_address: r.upstream_address,
             require_auth: r.require_auth,
+            strip_prefix: r.strip_prefix,
         })
         .collect();
 
+    let routes_count = cached_routes.len();
     cache.update_routes(cached_routes);
-    tracing::info!("Loaded proxy configuration from database");
+    tracing::info!("Loaded {} dynamic routes from database", routes_count);
     Ok(())
+}
+
+async fn database_cleanup_scheduler(db_pool: Arc<sqlx::PgPool>) {
+    use tokio::time::{interval, Duration};
+    
+    let mut cleanup_interval = interval(Duration::from_secs(60 * 60));
+    
+    loop {
+        cleanup_interval.tick().await;
+        
+        let deleted_codes = sqlx::query("DELETE FROM verification_codes WHERE expires_at < NOW()")
+            .execute(db_pool.as_ref())
+            .await;
+        
+        match deleted_codes {
+            Ok(result) => {
+                if result.rows_affected() > 0 {
+                    tracing::info!("Cleaned up {} expired verification codes", result.rows_affected());
+                }
+            }
+            Err(e) => tracing::error!("Failed to cleanup verification codes: {}", e),
+        }
+        
+        let deleted_tokens = sqlx::query(
+            "DELETE FROM refresh_tokens WHERE expires_at < NOW() OR revoked = TRUE"
+        )
+            .execute(db_pool.as_ref())
+            .await;
+        
+        match deleted_tokens {
+            Ok(result) => {
+                if result.rows_affected() > 0 {
+                    tracing::info!("Cleaned up {} expired/revoked refresh tokens", result.rows_affected());
+                }
+            }
+            Err(e) => tracing::error!("Failed to cleanup refresh tokens: {}", e),
+        }
+    }
 }
 
 async fn jwt_rotation_scheduler(

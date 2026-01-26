@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -9,6 +9,23 @@ pub struct AppConfig {
     pub jwt: JwtConfig,
     #[serde(default)]
     pub routing: RoutesConfig,
+}
+
+fn deserialize_routes<'de, D>(deserializer: D) -> Result<Vec<RouteConfig>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum RoutesHelper {
+        Json(String),
+        Array(Vec<RouteConfig>),
+    }
+
+    match RoutesHelper::deserialize(deserializer)? {
+        RoutesHelper::Array(routes) => Ok(routes),
+        RoutesHelper::Json(s) => serde_json::from_str(&s).map_err(serde::de::Error::custom),
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -28,11 +45,12 @@ pub struct RouteConfig {
     pub upstream: String,
     #[serde(default)]
     pub auth: bool,
+    pub strip_prefix: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct RoutesConfig {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_routes")]
     pub routes: Vec<RouteConfig>,
 }
 

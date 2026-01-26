@@ -91,27 +91,27 @@ export const adminApi = {
 };
 
 export const configApi = {
-  listRoutes: () => api<Array<{ id: string; path_prefix: string; upstream_address: string; require_auth: boolean; enabled: boolean }>>(
+  listRoutes: () => api<Array<{ id: string; path_prefix: string; upstream_address: string; require_auth: boolean; strip_prefix: string | null; enabled: boolean }>>(
     '/api/config/routes'
   ),
 
-  createRoute: (data: { path_prefix: string; upstream_address: string; require_auth: boolean }) =>
-    api('/api/config/routes', 'POST', data),
+  createRoute: (data: { path_prefix: string; upstream_address: string; require_auth: boolean; strip_prefix?: string }) =>
+    api<{ id: string; path_prefix: string; upstream_address: string; require_auth: boolean; strip_prefix: string | null; enabled: boolean }>('/api/config/routes', 'POST', data),
 
-  updateRoute: (id: string, data: { path_prefix: string; upstream_address: string; require_auth: boolean; enabled: boolean }) =>
-    api(`/api/config/routes/${id}`, 'PUT', data),
+  updateRoute: (id: string, data: { path_prefix: string; upstream_address: string; require_auth: boolean; strip_prefix?: string; enabled: boolean }) =>
+    api<{ id: string; path_prefix: string; upstream_address: string; require_auth: boolean; strip_prefix: string | null; enabled: boolean }>(`/api/config/routes/${id}`, 'PUT', data),
 
   deleteRoute: (id: string) => api(`/api/config/routes/${id}`, 'DELETE'),
 
-  listRateLimits: () => api<Array<{ id: string; name: string; path_pattern: string; max_requests: number; window_secs: number; enabled: boolean }>>(
+  listRateLimits: () => api<Array<{ id: string; name: string; path_pattern: string; limit_by: string; max_requests: number; window_secs: number; enabled: boolean }>>(
     '/api/config/rate-limits'
   ),
 
   createRateLimit: (data: { name: string; path_pattern: string; limit_by: string; max_requests: number; window_secs: number }) =>
-    api('/api/config/rate-limits', 'POST', data),
+    api<{ id: string; name: string; path_pattern: string; limit_by: string; max_requests: number; window_secs: number; enabled: boolean }>('/api/config/rate-limits', 'POST', data),
 
   updateRateLimit: (id: string, data: { name: string; path_pattern: string; limit_by: string; max_requests: number; window_secs: number; enabled: boolean }) =>
-    api(`/api/config/rate-limits/${id}`, 'PUT', data),
+    api<{ id: string; name: string; path_pattern: string; limit_by: string; max_requests: number; window_secs: number; enabled: boolean }>(`/api/config/rate-limits/${id}`, 'PUT', data),
 
   deleteRateLimit: (id: string) => api(`/api/config/rate-limits/${id}`, 'DELETE'),
 
@@ -126,7 +126,7 @@ export const configApi = {
     '/api/config/smtp'
   ),
 
-  updateSmtpConfig: (data: { smtp_host: string; smtp_port: number; smtp_user: string; smtp_pass: string; from_email: string; from_name: string }) =>
+  updateSmtpConfig: (data: { from_email: string; smtp_pass: string }) =>
     api('/api/config/smtp', 'PUT', data),
 
   getJwtSecretInfo: () => api<{ updated_at: string }>('/api/config/jwt-secret'),

@@ -43,7 +43,29 @@ pub async fn register(
 }
 
 fn is_valid_email(email: &str) -> bool {
-    email.contains('@') && email.contains('.') && email.len() >= 5
+    if !email.contains('@') || !email.contains('.') || email.len() < 5 {
+        return false;
+    }
+    
+    let domain = match email.split('@').nth(1) {
+        Some(d) => d.to_lowercase(),
+        None => return false,
+    };
+    
+    const ALLOWED_DOMAINS: &[&str] = &[
+        "qq.com",
+        "163.com",
+        "126.com",
+        "yeah.net",
+        "sina.com",
+        "gmail.com",
+        "outlook.com",
+        "hotmail.com",
+        "yahoo.com",
+        "icloud.com",
+    ];
+    
+    ALLOWED_DOMAINS.contains(&domain.as_str())
 }
 
 fn generate_code() -> String {

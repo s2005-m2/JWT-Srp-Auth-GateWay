@@ -33,9 +33,6 @@ cargo test
 cargo test <test_name>           # Single test
 cargo test <module>::            # All tests in module
 cargo test -- --nocapture        # Show println output
-
-# Config override
-ARC_AUTH__JWT__SECRET="prod-secret" cargo run
 ```
 
 ## STRUCTURE

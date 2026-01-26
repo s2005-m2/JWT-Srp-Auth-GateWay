@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use mail_builder::MessageBuilder;
 use mail_send::SmtpClientBuilder;
@@ -59,20 +60,24 @@ impl EmailService {
 
         let implicit_tls = config.smtp_port == 465;
 
-        SmtpClientBuilder::new(config.smtp_host.clone(), config.smtp_port as u16)
+        let builder = SmtpClientBuilder::new(config.smtp_host.clone(), config.smtp_port as u16)
             .implicit_tls(implicit_tls)
-            .credentials((config.smtp_user.clone(), config.smtp_pass.clone()))
-            .connect()
+            .credentials((config.smtp_user.clone(), config.smtp_pass.clone()));
+        
+        let mut client = tokio::time::timeout(Duration::from_secs(30), builder.connect())
             .await
-            .map_err(|e| anyhow::anyhow!("SMTP connection failed: {}", e))?
-            .send(
-                MessageBuilder::new()
-                    .from((config.from_name.as_str(), config.from_email.as_str()))
-                    .to(to)
-                    .subject(subject)
-                    .html_body(html_body),
-            )
+            .map_err(|_| anyhow::anyhow!("SMTP connection timeout"))?
+            .map_err(|e| anyhow::anyhow!("SMTP connection failed: {}", e))?;
+
+        let message = MessageBuilder::new()
+            .from((config.from_name.as_str(), config.from_email.as_str()))
+            .to(to)
+            .subject(subject)
+            .html_body(html_body);
+
+        tokio::time::timeout(Duration::from_secs(30), client.send(message))
             .await
+            .map_err(|_| anyhow::anyhow!("SMTP send timeout"))?
             .map_err(|e| anyhow::anyhow!("Failed to send email: {}", e))?;
 
         Ok(())

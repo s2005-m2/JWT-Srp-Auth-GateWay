@@ -5,6 +5,7 @@ pub struct CachedRoute {
     pub path_prefix: String,
     pub upstream_address: String,
     pub require_auth: bool,
+    pub strip_prefix: Option<String>,
 }
 
 pub struct ProxyConfigCache {
@@ -29,8 +30,9 @@ impl ProxyConfigCache {
     }
 
     pub fn update_routes(&self, routes: Vec<CachedRoute>) {
-        let mut dynamic = self.dynamic_routes.write().unwrap();
-        *dynamic = routes;
+        if let Ok(mut dynamic) = self.dynamic_routes.write() {
+            *dynamic = routes;
+        }
     }
 
     pub fn match_route(&self, path: &str) -> Option<MatchedRoute> {
@@ -39,16 +41,9 @@ impl ProxyConfigCache {
         }
 
         if path.starts_with("/arc-admin/") || path == "/arc-admin" {
-            let is_public = path.starts_with("/arc-admin/auth/")
-                || path.starts_with("/arc-admin/api/")
-                || path.starts_with("/arc-admin/assets/")
-                || path == "/arc-admin"
-                || path == "/arc-admin/"
-                || path.ends_with(".svg")
-                || path.ends_with(".ico");
             return Some(MatchedRoute {
                 upstream_address: self.auth_upstream.clone(),
-                require_auth: !is_public,
+                require_auth: false,
                 strip_prefix: Some("/arc-admin".to_string()),
             });
         }
@@ -74,25 +69,35 @@ impl ProxyConfigCache {
                 return Some(MatchedRoute {
                     upstream_address: route.upstream_address.clone(),
                     require_auth: route.require_auth,
-                    strip_prefix: None,
+                    strip_prefix: route.strip_prefix.clone(),
                 });
             }
         }
 
-        let dynamic = self.dynamic_routes.read().unwrap();
+        let dynamic = match self.dynamic_routes.read() {
+            Ok(guard) => guard,
+            Err(e) => {
+                tracing::warn!("Failed to acquire dynamic routes lock: {}", e);
+                return self.default_upstream.as_ref().map(|upstream| MatchedRoute {
+                    upstream_address: upstream.clone(),
+                    require_auth: true,
+                    strip_prefix: None,
+                });
+            }
+        };
         for route in dynamic.iter() {
             if path.starts_with(&route.path_prefix) {
                 return Some(MatchedRoute {
                     upstream_address: route.upstream_address.clone(),
                     require_auth: route.require_auth,
-                    strip_prefix: None,
+                    strip_prefix: route.strip_prefix.clone(),
                 });
             }
         }
 
         self.default_upstream.as_ref().map(|upstream| MatchedRoute {
             upstream_address: upstream.clone(),
-            require_auth: false,
+            require_auth: true,
             strip_prefix: None,
         })
     }

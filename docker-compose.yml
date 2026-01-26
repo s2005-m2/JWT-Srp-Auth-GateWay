@@ -21,13 +21,6 @@ services:
       - "8080:8080"
     environment:
       - ARC_AUTH__DATABASE__URL=postgres://postgres:postgres@postgres:5432/arc_auth
-      - ARC_AUTH__JWT__SECRET=${JWT_SECRET}
-      - ARC_AUTH__EMAIL__SMTP_HOST=smtp.yeah.net
-      - ARC_AUTH__EMAIL__SMTP_PORT=465
-      - ARC_AUTH__EMAIL__SMTP_USER=arcwhere@yeah.net
-      - ARC_AUTH__EMAIL__SMTP_PASS=${SMTP_PASS}
-      - ARC_AUTH__EMAIL__FROM_EMAIL=arcwhere@yeah.net
-      - ARC_AUTH__EMAIL__FROM_NAME=ARC Platform
       - ARC_AUTH__UPSTREAM__DEFAULT_UPSTREAM=127.0.0.1:7000
       - RUST_LOG=info
     depends_on:
