@@ -2,11 +2,16 @@
 
 # ARC_AUTH KNOWLEDGE BASE
 
-**Updated:** 2026-01-24
+**Updated:** 2026-01-28
 
 ## OVERVIEW
 
-High-performance authentication gateway. Dual-service architecture: Pingora reverse proxy (port 8080) + Axum auth API (port 3001 internal). Rust + PostgreSQL + JWT.
+High-performance authentication gateway. Triple-service architecture:
+- Pingora reverse proxy (port 8080) - public gateway
+- Axum Auth API (port 3001) - internal, proxied via gateway
+- Axum Admin API (port 3002) - separate, can be disabled
+
+Rust + PostgreSQL + JWT + SRP.
 
 ## COMMANDS
 
@@ -46,15 +51,16 @@ arc_auth/
 │   ├── api/              # Axum auth endpoints
 │   │   ├── mod.rs        # Router + AppState
 │   │   ├── middleware.rs # RateLimiter (sliding window)
-│   │   └── handlers/     # register, verify, login, refresh, admin
+│   │   └── handlers/     # register, verify, srp_login, refresh, admin, api_key
 │   ├── gateway/          # Pingora proxy
 │   │   ├── proxy.rs      # AuthGateway ProxyHttp impl + header protection
 │   │   ├── jwt.rs        # JwtValidator for gateway
 │   │   └── config_cache.rs # Static + dynamic route merging
-│   ├── services/         # Business logic
-│   └── models/           # User, VerificationCode, RefreshToken, Claims
+│   ├── services/         # Business logic (user, token, admin, api_key, srp, etc.)
+│   └── models/           # User, VerificationCode, RefreshToken, ApiKey, Claims
 ├── migrations/
-└── config/default.toml
+├── config/default.toml
+└── web/                  # Admin frontend (React + Vite)
 ```
 
 ## CODE STYLE
@@ -115,7 +121,7 @@ pub async fn login(
 | Rule | Reason |
 |------|--------|
 | Store raw refresh tokens | Only SHA256 hash in DB |
-| Use bcrypt | Project uses Argon2 exclusively |
+| Store plaintext passwords | Use SRP verifier only |
 | Add routes without rate limiting | See `middleware.rs` pattern |
 | Modify Pingora thread model | Axum spawned as tokio task, Pingora runs in main |
 | Use `unwrap()` in handlers | Return `AppError` instead |
@@ -125,11 +131,15 @@ pub async fn login(
 ## ARCHITECTURE
 
 ```
-Client -> Pingora (:8080) -> /auth/* -> Axum (:3001) -> PostgreSQL
+Client -> Pingora (:8080) -> /auth/* -> Axum Auth (:3001) -> PostgreSQL
                           -> /api/*  -> JWT check -> upstream service
+
+Admin  -> Axum Admin (:3002) -> /api/admin/* -> PostgreSQL
+                             -> /api/config/*
+                             -> /* (SPA)
 ```
 
-**Key insight**: Gateway validates JWT but doesn't issue tokens. Axum API issues tokens.
+**Key insight**: Gateway validates JWT but doesn't issue tokens. Auth API issues tokens. Admin API is separate and can be disabled.
 
 **Route priority**: Static routes (env/config) > Dynamic routes (database) > Default upstream
 
@@ -160,21 +170,42 @@ ARC_AUTH__ROUTING__ROUTES__0__AUTH=true
 | Proxy routing logic | `src/gateway/proxy.rs` |
 | Static route config | `src/config.rs` + `config/default.toml` |
 | Rate limiting | `src/api/middleware.rs` |
+| API Keys management | `src/services/api_key.rs` + `src/api/handlers/api_key.rs` |
+| SRP authentication | `src/services/srp.rs` + `src/api/handlers/srp_login.rs` |
 
 ## PORTS
 
-| Service | Port | Binding |
-|---------|------|---------|
-| Pingora Gateway | 8080 | 0.0.0.0 (public) |
-| Axum Auth API | 3001 | 127.0.0.1 (internal) |
-| PostgreSQL | 5432 | localhost |
+| Service | Port | Binding | Purpose |
+|---------|------|---------|---------|
+| Pingora Gateway | 8080 | 0.0.0.0 (public) | Auth proxy + API gateway |
+| Axum Auth API | 3001 | 127.0.0.1 (internal) | Login/register (via gateway) |
+| Axum Admin API | 3002 | 0.0.0.0 (optional) | Admin panel (can be disabled) |
+| PostgreSQL | 5432 | localhost | Database |
 
 ## SECURITY
 
+- **SRP Authentication**: Zero-knowledge password proof (SRP-6a), server never sees plaintext password
 - **Header protection**: Gateway rejects requests containing `X-User-Id` or `X-Request-Id` headers (prevents spoofing)
-- **Password hashing**: Argon2 only
-- **Token storage**: SHA256 hash of refresh tokens in DB
+- **Token storage**: SHA256 hash of refresh tokens and API keys in DB
 - **Rate limiting**: Sliding window per endpoint
+- **API Keys**: 256-bit keys for external integrations, no expiration, permission-scoped
+
+## API KEYS
+
+External integration keys for third-party applications:
+
+| Field | Description |
+|-------|-------------|
+| `key_hash` | SHA256 hash (raw key never stored) |
+| `key_prefix` | First 8 chars for identification |
+| `permissions` | JSON array: `["*"]`, `["routes:read", "stats:read"]` |
+
+**Endpoints** (Admin API, requires admin JWT):
+- `GET /api/config/api-keys` - List keys
+- `POST /api/config/api-keys` - Create key (returns raw key once)
+- `DELETE /api/config/api-keys/:id` - Delete key
+
+**Usage**: External apps use `X-API-Key: <64-char-hex>` header.
 
 ## NOTES
 

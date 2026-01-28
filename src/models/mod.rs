@@ -13,9 +13,9 @@ pub struct UserInfo {
 pub struct User {
     pub id: Uuid,
     pub email: String,
-    #[serde(skip_serializing)]
-    pub password_hash: String,
     pub email_verified: bool,
+    pub srp_salt: Option<String>,
+    pub srp_verifier: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -154,4 +154,47 @@ pub struct SmtpConfig {
 #[derive(Debug, Clone, Serialize)]
 pub struct JwtSecretInfo {
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+pub struct ApiKey {
+    pub id: Uuid,
+    pub admin_id: Uuid,
+    pub name: String,
+    #[serde(skip_serializing)]
+    pub key_hash: String,
+    pub key_prefix: String,
+    pub permissions: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ApiKeyPermissions {
+    permissions: Vec<String>,
+}
+
+impl ApiKeyPermissions {
+    pub fn new(value: &serde_json::Value) -> Self {
+        let permissions = value
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self { permissions }
+    }
+
+    pub fn has(&self, required: &str) -> bool {
+        self.permissions.iter().any(|p| p == required || p == "*")
+    }
+
+    pub fn has_any(&self, required: &[&str]) -> bool {
+        required.iter().any(|r| self.has(r))
+    }
+
+    pub fn all(&self) -> &[String] {
+        &self.permissions
+    }
 }

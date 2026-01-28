@@ -5,6 +5,7 @@
     "dashboard": "Dashboard",
     "proxyConfig": "Proxy Config",
     "users": "Users",
+    "apiKeys": "API Keys",
     "settings": "Settings",
     "save": "Save",
     "cancel": "Cancel",
@@ -67,5 +68,19 @@
     "pathPattern": "Path Pattern",
     "maxRequests": "Max Requests",
     "windowSecs": "Window (sec)"
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "description": "Generate API keys for external integrations and third-party applications.",
+    "createNew": "Create New API Key",
+    "name": "Key Name",
+    "namePlaceholder": "e.g., My Integration",
+    "permissions": "Permissions",
+    "generate": "Generate Key",
+    "existingKeys": "Existing Keys",
+    "noKeys": "No API keys created yet",
+    "newKeyCreated": "New API Key Created",
+    "copyWarning": "Copy this key now. You won't be able to see it again!",
+    "dismiss": "I've copied the key"
   }
 }

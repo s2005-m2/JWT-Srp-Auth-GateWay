@@ -133,3 +133,16 @@ export const configApi = {
 
   rotateJwtSecret: () => api('/api/config/jwt-secret', 'POST'),
 };
+
+export const apiKeysApi = {
+  list: () => api<{ api_keys: Array<{ id: string; name: string; key_prefix: string; permissions: string[]; created_at: string }> }>(
+    '/api/config/api-keys'
+  ),
+
+  create: (name: string, permissions: string[]) =>
+    api<{ api_key: { id: string; name: string; key_prefix: string; permissions: string[]; created_at: string }; raw_key: string }>(
+      '/api/config/api-keys', 'POST', { name, permissions }
+    ),
+
+  delete: (id: string) => api(`/api/config/api-keys/${id}`, 'DELETE'),
+};

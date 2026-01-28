@@ -77,5 +77,8 @@ pub async fn admin_auth_middleware(
             .into_response();
     }
 
+    let mut request = request;
+    request.extensions_mut().insert(claims.sub);
+
     next.run(request).await
 }

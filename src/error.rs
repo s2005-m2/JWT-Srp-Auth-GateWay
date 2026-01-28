@@ -37,9 +37,15 @@ pub enum AppError {
     #[error("Email already exists")]
     EmailExists,
 
+    #[error("Resource not found")]
+    NotFound,
+
     #[error("Rate limit exceeded")]
     #[allow(dead_code)]
     RateLimited,
+
+    #[error("Access forbidden")]
+    Forbidden,
 
     #[error("Internal server error")]
     Internal(#[from] anyhow::Error),
@@ -71,8 +77,9 @@ impl AppError {
             | Self::InvalidToken
             | Self::TokenExpired
             | Self::TokenRevoked => StatusCode::UNAUTHORIZED,
-            Self::EmailNotVerified => StatusCode::FORBIDDEN,
+            Self::EmailNotVerified | Self::Forbidden => StatusCode::FORBIDDEN,
             Self::EmailExists => StatusCode::CONFLICT,
+            Self::NotFound => StatusCode::NOT_FOUND,
             Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             Self::Internal(_) | Self::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -90,7 +97,9 @@ impl AppError {
             Self::TokenRevoked => "TOKEN_REVOKED",
             Self::EmailNotVerified => "EMAIL_NOT_VERIFIED",
             Self::EmailExists => "EMAIL_EXISTS",
+            Self::NotFound => "NOT_FOUND",
             Self::RateLimited => "RATE_LIMITED",
+            Self::Forbidden => "FORBIDDEN",
             Self::Internal(_) | Self::Database(_) => "INTERNAL_ERROR",
         }
     }
@@ -98,15 +107,7 @@ impl AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        match &self {
-            Self::Database(e) => {
-                tracing::error!(error = %e, error_debug = ?e, "Database error occurred");
-            }
-            Self::Internal(e) => {
-                tracing::error!(error = %e, error_debug = ?e, "Internal error occurred");
-            }
-            _ => {}
-        }
+        self.log_error();
 
         let status = self.status_code();
         let body = ErrorResponse {
@@ -120,4 +121,164 @@ impl IntoResponse for AppError {
     }
 }
 
+impl AppError {
+    fn log_error(&self) {
+        match self {
+            Self::Database(e) => {
+                tracing::error!(error = %e, error_debug = ?e, "Database error occurred");
+            }
+            Self::Internal(e) => {
+                tracing::error!(error = %e, error_debug = ?e, "Internal error occurred");
+            }
+            Self::InvalidCredentials => {
+                tracing::warn!(
+                    error_code = "INVALID_CREDENTIALS",
+                    "Security: authentication failed"
+                );
+            }
+            Self::InvalidToken => {
+                tracing::warn!(
+                    error_code = "INVALID_TOKEN",
+                    "Security: invalid token presented"
+                );
+            }
+            Self::TokenExpired => {
+                tracing::warn!(
+                    error_code = "TOKEN_EXPIRED",
+                    "Security: expired token presented"
+                );
+            }
+            Self::TokenRevoked => {
+                tracing::warn!(
+                    error_code = "TOKEN_REVOKED",
+                    "Security: revoked token presented"
+                );
+            }
+            Self::RateLimited => {
+                tracing::warn!(error_code = "RATE_LIMITED", "Security: rate limit exceeded");
+            }
+            Self::InvalidEmail => {
+                tracing::info!(
+                    error_code = "INVALID_EMAIL",
+                    "Validation: invalid email format"
+                );
+            }
+            Self::InvalidCode => {
+                tracing::info!(
+                    error_code = "INVALID_CODE",
+                    "Validation: invalid verification code"
+                );
+            }
+            Self::WeakPassword => {
+                tracing::info!(
+                    error_code = "WEAK_PASSWORD",
+                    "Validation: weak password rejected"
+                );
+            }
+            Self::EmailExists => {
+                tracing::info!(
+                    error_code = "EMAIL_EXISTS",
+                    "Validation: duplicate email registration"
+                );
+            }
+            Self::EmailNotVerified => {
+                tracing::info!(
+                    error_code = "EMAIL_NOT_VERIFIED",
+                    "Validation: unverified email access"
+                );
+            }
+            Self::InvalidRequest(msg) => {
+                tracing::info!(error_code = "INVALID_REQUEST", message = %msg, "Validation: invalid request");
+            }
+            Self::NotFound => {
+                tracing::info!(error_code = "NOT_FOUND", "Resource not found");
+            }
+            Self::Forbidden => {
+                tracing::warn!(error_code = "FORBIDDEN", "Security: access forbidden");
+            }
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_status_codes_bad_request() {
+        assert_eq!(
+            AppError::InvalidEmail.status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(AppError::InvalidCode.status_code(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            AppError::WeakPassword.status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            AppError::InvalidRequest("test".into()).status_code(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn test_status_codes_unauthorized() {
+        assert_eq!(
+            AppError::InvalidCredentials.status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            AppError::InvalidToken.status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            AppError::TokenExpired.status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            AppError::TokenRevoked.status_code(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[test]
+    fn test_status_codes_other() {
+        assert_eq!(
+            AppError::EmailNotVerified.status_code(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(AppError::EmailExists.status_code(), StatusCode::CONFLICT);
+        assert_eq!(
+            AppError::RateLimited.status_code(),
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+
+    #[test]
+    fn test_error_codes() {
+        assert_eq!(AppError::InvalidEmail.error_code(), "INVALID_EMAIL");
+        assert_eq!(
+            AppError::InvalidCredentials.error_code(),
+            "INVALID_CREDENTIALS"
+        );
+        assert_eq!(AppError::InvalidToken.error_code(), "INVALID_TOKEN");
+        assert_eq!(AppError::TokenExpired.error_code(), "TOKEN_EXPIRED");
+        assert_eq!(AppError::TokenRevoked.error_code(), "TOKEN_REVOKED");
+        assert_eq!(AppError::RateLimited.error_code(), "RATE_LIMITED");
+    }
+
+    #[test]
+    fn test_error_messages() {
+        assert_eq!(AppError::InvalidEmail.to_string(), "Invalid email format");
+        assert_eq!(
+            AppError::InvalidCredentials.to_string(),
+            "Invalid credentials"
+        );
+        assert_eq!(
+            AppError::InvalidRequest("bad data".into()).to_string(),
+            "Invalid request: bad data"
+        );
+    }
+}

@@ -18,8 +18,19 @@ impl AuthGateway {
         let mut header = ResponseHeader::build(status, None)?;
         header.insert_header("Content-Type", "application/json")?;
         header.insert_header("Content-Length", body.len().to_string())?;
+        header.insert_header("Access-Control-Allow-Origin", "*")?;
         session.write_response_header(Box::new(header), true).await?;
         session.write_response_body(Some(body.into()), true).await?;
+        Ok(true)
+    }
+
+    async fn send_cors_preflight(&self, session: &mut Session) -> Result<bool> {
+        let mut header = ResponseHeader::build(204, None)?;
+        header.insert_header("Access-Control-Allow-Origin", "*")?;
+        header.insert_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")?;
+        header.insert_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")?;
+        header.insert_header("Access-Control-Max-Age", "86400")?;
+        session.write_response_header(Box::new(header), true).await?;
         Ok(true)
     }
 }
@@ -42,6 +53,7 @@ pub struct RequestCtx {
     pub should_refresh: bool,
     pub matched_route: Option<MatchedRoute>,
     pub connection_type: ConnectionType,
+    pub origin: Option<String>,
 }
 
 
@@ -109,6 +121,7 @@ impl ProxyHttp for AuthGateway {
             should_refresh: false,
             matched_route: None,
             connection_type: ConnectionType::Http,
+            origin: None,
         }
     }
 
@@ -116,6 +129,17 @@ impl ProxyHttp for AuthGateway {
         let method = session.req_header().method.as_str();
         let path = session.req_header().uri.path();
         let query = session.req_header().uri.query().unwrap_or("");
+
+        ctx.origin = session
+            .req_header()
+            .headers
+            .get("origin")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+
+        if method == "OPTIONS" {
+            return self.send_cors_preflight(session).await;
+        }
         
         let headers = &session.req_header().headers;
         if headers.contains_key("x-user-id") || headers.contains_key("x-request-id") {
@@ -286,6 +310,10 @@ impl ProxyHttp for AuthGateway {
         if ctx.should_refresh {
             upstream_response.insert_header("X-Token-Refresh", "true")?;
         }
+
+        upstream_response.insert_header("Access-Control-Allow-Origin", "*")?;
+        upstream_response.insert_header("Access-Control-Expose-Headers", "X-Token-Refresh")?;
+
         Ok(())
     }
 }

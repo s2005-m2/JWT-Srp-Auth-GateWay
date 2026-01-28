@@ -10,8 +10,9 @@
 - **邮箱注册**: 验证码注册流程
 - **动态路由**: 通过管理后台配置代理路由
 - **静态路由**: 支持环境变量/配置文件配置路由，优先级高于数据库
-- **安全设计**: Argon2 密码哈希、速率限制、Token Hash 存储、Header 伪造防护
+- **安全设计**: SRP 零知识密码证明、速率限制、Token Hash 存储、Header 伪造防护
 - **WebSocket/SSE**: 支持长连接代理，连接建立时一次性鉴权
+- **API Keys**: 256 位密钥，用于外部集成和第三方应用
 
 ## 系统架构
 
@@ -108,21 +109,30 @@ ARC_AUTH__ROUTING__ROUTES__1__AUTH=false
 
 ## API 文档
 
-### 注册
+详细的接入文档请参考 [docs/auth-integration.md](docs/auth-integration.md)。
+
+### 注册 (SRP)
 
 ```http
 POST /auth/register
 {"email": "user@example.com"}
-
-POST /auth/register/verify
-{"email": "user@example.com", "code": "123456", "password": "SecurePass123!"}
 ```
 
-### 登录
+```http
+POST /auth/register/verify
+{"email": "user@example.com", "code": "123456", "salt": "<hex>", "verifier": "<hex>"}
+```
+
+### 登录 (SRP 两步验证)
 
 ```http
-POST /auth/login
-{"email": "user@example.com", "password": "SecurePass123!"}
+POST /auth/login/init
+{"email": "user@example.com", "client_public": "<hex>"}
+```
+
+```http
+POST /auth/login/verify
+{"session_id": "<uuid>", "client_proof": "<hex>"}
 ```
 
 ### 刷新 Token
@@ -132,14 +142,16 @@ POST /auth/refresh
 {"refresh_token": "eyJ..."}
 ```
 
-### 密码重置
+### 密码重置 (SRP)
 
 ```http
 POST /auth/password/reset
 {"email": "user@example.com"}
+```
 
+```http
 POST /auth/password/reset/confirm
-{"email": "user@example.com", "code": "123456", "new_password": "NewSecurePass123!"}
+{"email": "user@example.com", "code": "123456", "salt": "<hex>", "verifier": "<hex>"}
 ```
 
 ### 受保护 API
@@ -183,6 +195,49 @@ WebSocket 和 SSE 连接在建立时进行一次 JWT 验证，连接期间不再
 | `EMAIL_EXISTS` | 409 | 邮箱已存在 |
 | `RATE_LIMITED` | 429 | 请求频率超限 |
 | `RESERVED_HEADER` | 400 | 请求包含保留 Header (X-User-Id/X-Request-Id) |
+| `NOT_FOUND` | 404 | 资源不存在 |
+
+## API Keys
+
+用于外部集成和第三方应用的 256 位密钥。
+
+### 创建密钥
+
+通过管理后台 `/api-keys` 页面创建，或调用 API：
+
+```http
+POST /api/config/api-keys
+Authorization: Bearer <admin_token>
+{"name": "My Integration", "permissions": ["*"]}
+```
+
+响应包含 64 字符的 hex 密钥（仅显示一次）：
+
+```json
+{
+  "api_key": {"id": "...", "name": "My Integration", "key_prefix": "a1b2c3d4"},
+  "raw_key": "a1b2c3d4e5f6..."
+}
+```
+
+### 使用密钥
+
+外部应用通过 `X-API-Key` header 访问：
+
+```http
+GET /api/some-endpoint
+X-API-Key: a1b2c3d4e5f6...
+```
+
+### 权限
+
+| 权限 | 说明 |
+|------|------|
+| `*` | 完全访问 |
+| `routes:read` | 读取路由配置 |
+| `routes:write` | 修改路由配置 |
+| `users:read` | 读取用户列表 |
+| `stats:read` | 读取统计数据 |
 
 ## 开发
 

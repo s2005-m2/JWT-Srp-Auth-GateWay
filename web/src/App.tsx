@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import ProxyConfig from './pages/ProxyConfig';
 import Users from './pages/Users';
 import AuthTest from './pages/AuthTest';
+import ApiKeys from './pages/ApiKeys';
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '');
 
@@ -25,6 +26,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="proxy" element={<ProxyConfig />} />
             <Route path="users" element={<Users />} />
+            <Route path="api-keys" element={<ApiKeys />} />
             <Route path="auth-test" element={<AuthTest />} />
           </Route>
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { generateRegistrationData, createLoginSession, computeClientProof } from '../lib/srp';
 
 interface ApiResponse {
   data: unknown;
@@ -19,6 +20,8 @@ function ResponseDisplay({ response }: { response: ApiResponse | null }) {
     </pre>
   );
 }
+
+const GATEWAY_URL = 'http://localhost:8080';
 
 export default function AuthTest() {
   const [registerEmail, setRegisterEmail] = useState('');
@@ -84,7 +87,7 @@ export default function AuthTest() {
               <Button
                 className="w-full"
                 isLoading={registerLoading}
-                onClick={() => callApi('/auth/register', { email: registerEmail }, setRegisterRes, setRegisterLoading)}
+                onClick={() => callApi(`${GATEWAY_URL}/auth/register`, { email: registerEmail }, setRegisterRes, setRegisterLoading)}
               >
                 Send Verification Code
               </Button>
@@ -118,13 +121,17 @@ export default function AuthTest() {
               <Button
                 className="w-full"
                 isLoading={verifyLoading}
-                onClick={() => callApi('/auth/register/verify', {
-                  email: verifyEmail,
-                  code: verifyCode,
-                  password: verifyPassword,
-                }, setVerifyRes, setVerifyLoading)}
+                onClick={() => {
+                  const { salt, verifier } = generateRegistrationData(verifyEmail, verifyPassword);
+                  callApi(`${GATEWAY_URL}/auth/register/verify`, {
+                    email: verifyEmail,
+                    code: verifyCode,
+                    salt,
+                    verifier,
+                  }, setVerifyRes, setVerifyLoading);
+                }}
               >
-                Verify & Create Account
+                Verify & Create Account (SRP)
               </Button>
             </div>
             <ResponseDisplay response={verifyRes} />
@@ -133,7 +140,7 @@ export default function AuthTest() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">POST /auth/login</CardTitle>
+            <CardTitle className="text-lg">SRP Login (2-step)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -151,12 +158,48 @@ export default function AuthTest() {
               <Button
                 className="w-full"
                 isLoading={loginLoading}
-                onClick={() => callApi('/auth/login', {
-                  email: loginEmail,
-                  password: loginPassword,
-                }, setLoginRes, setLoginLoading)}
+                onClick={async () => {
+                  setLoginLoading(true);
+                  try {
+                    const session = createLoginSession();
+                    const initRes = await fetch(`${GATEWAY_URL}/auth/login/init`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        email: loginEmail,
+                        client_public: session.clientPublicEphemeral,
+                      }),
+                    });
+                    const initData = await initRes.json();
+                    if (!initRes.ok) {
+                      setLoginRes({ data: initData, status: initRes.status, ok: false });
+                      return;
+                    }
+                    const clientProof = computeClientProof(
+                      loginEmail,
+                      loginPassword,
+                      initData.salt,
+                      session.clientSecretEphemeral,
+                      initData.server_public
+                    );
+                    const verifyRes = await fetch(`${GATEWAY_URL}/auth/login/verify`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        session_id: initData.session_id,
+                        client_proof: clientProof,
+                      }),
+                    });
+                    const verifyData = await verifyRes.json();
+                    setLoginRes({ data: verifyData, status: verifyRes.status, ok: verifyRes.ok });
+                  } catch (err) {
+                    setLoginRes({ data: { error: String(err) }, status: 0, ok: false });
+                  } finally {
+                    setLoginLoading(false);
+                  }
+                }}
               >
-                Login
+                Login (SRP)
               </Button>
             </div>
             <ResponseDisplay response={loginRes} />
@@ -177,7 +220,7 @@ export default function AuthTest() {
               <Button
                 className="w-full"
                 isLoading={refreshLoading}
-                onClick={() => callApi('/auth/refresh', {
+                onClick={() => callApi(`${GATEWAY_URL}/auth/refresh`, {
                   refresh_token: refreshToken,
                 }, setRefreshRes, setRefreshLoading)}
               >

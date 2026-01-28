@@ -5,6 +5,7 @@
     "dashboard": "仪表盘",
     "proxyConfig": "代理配置",
     "users": "用户管理",
+    "apiKeys": "API 密钥",
     "settings": "设置",
     "save": "保存",
     "cancel": "取消",
@@ -67,5 +68,19 @@
     "pathPattern": "路径模式",
     "maxRequests": "最大请求数",
     "windowSecs": "时间窗口 (秒)"
+  },
+  "apiKeys": {
+    "title": "API 密钥",
+    "description": "为外部集成和第三方应用生成 API 密钥。",
+    "createNew": "创建新密钥",
+    "name": "密钥名称",
+    "namePlaceholder": "例如：我的集成",
+    "permissions": "权限",
+    "generate": "生成密钥",
+    "existingKeys": "已有密钥",
+    "noKeys": "暂无 API 密钥",
+    "newKeyCreated": "新密钥已创建",
+    "copyWarning": "请立即复制此密钥，之后将无法再次查看！",
+    "dismiss": "我已复制密钥"
   }
 }

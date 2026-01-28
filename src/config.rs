@@ -32,6 +32,7 @@ where
 pub struct ServerConfig {
     pub gateway_port: u16,
     pub api_port: u16,
+    pub admin_port: u16,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,6 +98,7 @@ impl Default for ServerConfig {
         Self {
             gateway_port: 8080,
             api_port: 3001,
+            admin_port: 3002,
         }
     }
 }

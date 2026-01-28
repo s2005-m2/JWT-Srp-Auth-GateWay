@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use tokio::sync::RwLock;
 
 use crate::models::AccessTokenClaims;
@@ -15,9 +15,12 @@ pub struct JwtValidator {
 
 impl JwtValidator {
     pub fn new(system_config: Arc<SystemConfigService>, auto_refresh_threshold: i64) -> Self {
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.set_required_spec_claims(&["exp", "sub", "iat"]);
+        
         Self {
             system_config,
-            validation: Validation::default(),
+            validation,
             auto_refresh_threshold,
             cached_secret: Arc::new(RwLock::new(String::new())),
         }

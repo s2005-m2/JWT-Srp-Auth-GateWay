@@ -1,19 +1,19 @@
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
-    Argon2,
-};
+use tracing::warn;
 
 use crate::api::AppState;
 use crate::error::{AppError, Result};
-use crate::models::{User, UserInfo, VerificationCode};
+use crate::models::UserInfo;
+
+const MAX_VERIFICATION_ATTEMPTS: i32 = 5;
 
 #[derive(Deserialize)]
 pub struct VerifyRequest {
     pub email: String,
     pub code: String,
-    pub password: String,
+    pub salt: String,
+    pub verifier: String,
 }
 
 #[derive(Serialize)]
@@ -27,85 +27,83 @@ pub async fn verify(
     State(state): State<AppState>,
     Json(req): Json<VerifyRequest>,
 ) -> Result<Json<AuthResponse>> {
-    validate_password(&req.password)?;
-
     let mut tx = state.db_pool.begin().await?;
 
-    let record = sqlx::query_as::<_, VerificationCode>(
-        "SELECT * FROM verification_codes 
-         WHERE email = $1 AND code = $2 AND code_type = $3 
+    let record: Option<(uuid::Uuid, i32)> = sqlx::query_as(
+        "SELECT id, attempts FROM verification_codes 
+         WHERE email = $1 AND code_type = $2 
          AND expires_at > NOW() AND used = FALSE
          ORDER BY created_at DESC LIMIT 1
          FOR UPDATE SKIP LOCKED"
     )
     .bind(&req.email)
-    .bind(&req.code)
     .bind("register")
     .fetch_optional(&mut *tx)
     .await?;
 
-    let vc = match record {
-        Some(vc) => vc,
+    let (code_id, attempts) = match record {
+        Some(r) => r,
         None => return Err(AppError::InvalidCode),
     };
 
-    sqlx::query("UPDATE verification_codes SET used = TRUE WHERE id = $1")
-        .bind(vc.id)
+    if attempts >= MAX_VERIFICATION_ATTEMPTS {
+        warn!(email = %req.email, "Verification code exhausted (max attempts reached)");
+        return Err(AppError::InvalidCode);
+    }
+
+    sqlx::query("UPDATE verification_codes SET attempts = attempts + 1 WHERE id = $1")
+        .bind(code_id)
         .execute(&mut *tx)
         .await?;
 
-    let user = create_user_in_tx(&mut tx, &req.email, &req.password).await?;
+    let valid: Option<(bool,)> = sqlx::query_as(
+        "SELECT used FROM verification_codes WHERE id = $1 AND code = $2"
+    )
+    .bind(code_id)
+    .bind(&req.code)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if valid.is_none() {
+        tx.commit().await?;
+        return Err(AppError::InvalidCode);
+    }
+
+    sqlx::query("UPDATE verification_codes SET used = TRUE WHERE id = $1")
+        .bind(code_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let user_id = create_user_srp(&mut tx, &req.email, &req.salt, &req.verifier).await?;
     
     tx.commit().await?;
 
-    let tokens = generate_tokens(&state, &user).await?;
+    let access = state.token_service.generate_access_token(user_id, &req.email).await?;
+    let refresh = state.token_service.generate_refresh_token(user_id).await?;
 
     Ok(Json(AuthResponse {
         user: UserInfo {
-            id: user.id.to_string(),
-            email: user.email,
+            id: user_id.to_string(),
+            email: req.email,
         },
-        access_token: tokens.0,
-        refresh_token: tokens.1,
+        access_token: access,
+        refresh_token: refresh,
     }))
 }
 
-fn validate_password(password: &str) -> Result<()> {
-    if password.len() < 8 {
-        return Err(AppError::WeakPassword);
-    }
-    let has_upper = password.chars().any(|c| c.is_uppercase());
-    let has_lower = password.chars().any(|c| c.is_lowercase());
-    let has_digit = password.chars().any(|c| c.is_ascii_digit());
-
-    if !has_upper || !has_lower || !has_digit {
-        return Err(AppError::WeakPassword);
-    }
-    Ok(())
-}
-
-async fn generate_tokens(state: &AppState, user: &User) -> Result<(String, String)> {
-    let access = state.token_service.generate_access_token(user.id, &user.email).await?;
-    let refresh = state.token_service.generate_refresh_token(user.id).await?;
-    Ok((access, refresh))
-}
-
-async fn create_user_in_tx(
+async fn create_user_srp(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     email: &str,
-    password: &str,
-) -> Result<User> {
-    let salt = SaltString::generate(&mut OsRng);
-    let password_hash = Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Failed to hash password")))?
-        .to_string();
-
-    let user = sqlx::query_as::<_, User>(
-        "INSERT INTO users (email, password_hash, email_verified) VALUES ($1, $2, TRUE) RETURNING *"
+    salt: &str,
+    verifier: &str,
+) -> Result<uuid::Uuid> {
+    let (id,): (uuid::Uuid,) = sqlx::query_as(
+        "INSERT INTO users (email, email_verified, srp_salt, srp_verifier) 
+         VALUES ($1, TRUE, $2, $3) RETURNING id"
     )
     .bind(email)
-    .bind(&password_hash)
+    .bind(salt)
+    .bind(verifier)
     .fetch_one(&mut **tx)
     .await
     .map_err(|e| {
@@ -117,5 +115,5 @@ async fn create_user_in_tx(
         AppError::Database(e)
     })?;
 
-    Ok(user)
+    Ok(id)
 }

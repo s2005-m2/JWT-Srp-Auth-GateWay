@@ -71,8 +71,8 @@ pub async fn get_stats(
 pub async fn get_users(
     State(state): State<AppState>,
 ) -> Result<Json<UserListResponse>> {
-    let users: Vec<(uuid::Uuid, String, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT id, email, created_at FROM users ORDER BY created_at DESC LIMIT 100"
+    let users: Vec<(uuid::Uuid, String, bool, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT id, email, email_verified, created_at FROM users ORDER BY created_at DESC LIMIT 100"
     )
     .fetch_all(state.db_pool.as_ref())
     .await?;
@@ -83,10 +83,10 @@ pub async fn get_users(
 
     let user_list: Vec<UserListItem> = users
         .into_iter()
-        .map(|(id, email, created_at)| UserListItem {
+        .map(|(id, email, email_verified, created_at)| UserListItem {
             id: id.to_string(),
             email,
-            status: "Active".to_string(),
+            status: if email_verified { "Active" } else { "Pending" }.to_string(),
             created_at,
             last_login: None,
         })

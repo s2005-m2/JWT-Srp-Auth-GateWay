@@ -43,15 +43,33 @@ pub async fn register(
 }
 
 fn is_valid_email(email: &str) -> bool {
-    if !email.contains('@') || !email.contains('.') || email.len() < 5 {
+    const MAX_EMAIL_LENGTH: usize = 254;
+    const MAX_LOCAL_LENGTH: usize = 64;
+    
+    if email.len() > MAX_EMAIL_LENGTH || email.len() < 5 {
         return false;
     }
     
-    let domain = match email.split('@').nth(1) {
-        Some(d) => d.to_lowercase(),
-        None => return false,
-    };
+    let parts: Vec<&str> = email.split('@').collect();
+    if parts.len() != 2 {
+        return false;
+    }
     
+    let (local, domain) = (parts[0], parts[1]);
+    
+    if local.is_empty() || local.len() > MAX_LOCAL_LENGTH {
+        return false;
+    }
+    
+    if !is_valid_local_part(local) {
+        return false;
+    }
+    
+    if !is_valid_domain(domain) {
+        return false;
+    }
+    
+    let domain_lower = domain.to_lowercase();
     const ALLOWED_DOMAINS: &[&str] = &[
         "qq.com",
         "163.com",
@@ -65,7 +83,51 @@ fn is_valid_email(email: &str) -> bool {
         "icloud.com",
     ];
     
-    ALLOWED_DOMAINS.contains(&domain.as_str())
+    ALLOWED_DOMAINS.contains(&domain_lower.as_str())
+}
+
+fn is_valid_local_part(local: &str) -> bool {
+    if local.starts_with('.') || local.ends_with('.') || local.contains("..") {
+        return false;
+    }
+    
+    local.chars().all(|c| {
+        c.is_ascii_alphanumeric() || "!#$%&'*+/=?^_`{|}~.-".contains(c)
+    })
+}
+
+fn is_valid_domain(domain: &str) -> bool {
+    if domain.is_empty() || domain.len() > 253 {
+        return false;
+    }
+    
+    if domain.starts_with('.') || domain.ends_with('.') || domain.starts_with('-') {
+        return false;
+    }
+    
+    let labels: Vec<&str> = domain.split('.').collect();
+    if labels.len() < 2 {
+        return false;
+    }
+    
+    for label in &labels {
+        if label.is_empty() || label.len() > 63 {
+            return false;
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return false;
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return false;
+        }
+    }
+    
+    let tld = labels.last().unwrap();
+    if tld.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    
+    true
 }
 
 fn generate_code() -> String {
@@ -90,4 +152,92 @@ async fn save_verification_code(
     .execute(state.db_pool.as_ref())
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_email_allowed_domains() {
+        assert!(is_valid_email("user@gmail.com"));
+        assert!(is_valid_email("test.user@outlook.com"));
+        assert!(is_valid_email("user123@qq.com"));
+    }
+
+    #[test]
+    fn test_invalid_email_disallowed_domains() {
+        assert!(!is_valid_email("user@unknown.com"));
+        assert!(!is_valid_email("user@example.org"));
+    }
+
+    #[test]
+    fn test_invalid_email_no_at_symbol() {
+        assert!(!is_valid_email("usergmail.com"));
+    }
+
+    #[test]
+    fn test_invalid_email_multiple_at_symbols() {
+        assert!(!is_valid_email("user@@gmail.com"));
+        assert!(!is_valid_email("user@test@gmail.com"));
+    }
+
+    #[test]
+    fn test_invalid_email_empty_local_part() {
+        assert!(!is_valid_email("@gmail.com"));
+    }
+
+    #[test]
+    fn test_invalid_email_dots_in_local() {
+        assert!(!is_valid_email(".user@gmail.com"));
+        assert!(!is_valid_email("user.@gmail.com"));
+        assert!(!is_valid_email("us..er@gmail.com"));
+    }
+
+    #[test]
+    fn test_invalid_email_too_short() {
+        assert!(!is_valid_email("a@b"));
+        assert!(!is_valid_email("ab"));
+    }
+
+    #[test]
+    fn test_invalid_email_too_long() {
+        let long_local = "a".repeat(65);
+        let email = format!("{}@gmail.com", long_local);
+        assert!(!is_valid_email(&email));
+    }
+
+    #[test]
+    fn test_valid_local_part() {
+        assert!(is_valid_local_part("user"));
+        assert!(is_valid_local_part("user.name"));
+        assert!(is_valid_local_part("user+tag"));
+    }
+
+    #[test]
+    fn test_invalid_local_part_special_chars() {
+        assert!(!is_valid_local_part("user name"));
+        assert!(!is_valid_local_part("user<>name"));
+    }
+
+    #[test]
+    fn test_valid_domain() {
+        assert!(is_valid_domain("gmail.com"));
+        assert!(is_valid_domain("sub.domain.com"));
+    }
+
+    #[test]
+    fn test_invalid_domain_no_tld() {
+        assert!(!is_valid_domain("localhost"));
+    }
+
+    #[test]
+    fn test_invalid_domain_numeric_tld() {
+        assert!(!is_valid_domain("test.123"));
+    }
+
+    #[test]
+    fn test_invalid_domain_starts_with_hyphen() {
+        assert!(!is_valid_domain("-invalid.com"));
+    }
 }

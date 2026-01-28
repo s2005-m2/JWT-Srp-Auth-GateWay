@@ -44,7 +44,8 @@ pub async fn request_password_reset(
 pub struct ResetPasswordRequest {
     pub email: String,
     pub code: String,
-    pub new_password: String,
+    pub salt: String,
+    pub verifier: String,
 }
 
 #[derive(Serialize)]
@@ -58,11 +59,6 @@ pub async fn reset_password(
 ) -> Result<Json<ResetPasswordResponse>> {
     info!(email = %req.email, "Password reset attempt");
 
-    if !is_strong_password(&req.new_password) {
-        warn!(email = %req.email, "Password reset failed: weak password");
-        return Err(AppError::WeakPassword);
-    }
-
     let valid = verify_code(&state, &req.email, &req.code, "password_reset").await?;
     if !valid {
         warn!(email = %req.email, "Password reset failed: invalid code");
@@ -75,10 +71,7 @@ pub async fn reset_password(
         .await?
         .ok_or(AppError::InvalidCredentials)?;
 
-    state
-        .user_service
-        .update_password(user.id, &req.new_password)
-        .await?;
+    update_srp_credentials(&state, user.id, &req.salt, &req.verifier).await?;
 
     mark_code_used(&state, &req.email, &req.code, "password_reset").await?;
 
@@ -95,11 +88,19 @@ fn generate_code() -> String {
     format!("{:06}", rng.gen_range(0..1000000))
 }
 
-fn is_strong_password(password: &str) -> bool {
-    password.len() >= 8
-        && password.chars().any(|c| c.is_uppercase())
-        && password.chars().any(|c| c.is_lowercase())
-        && password.chars().any(|c| c.is_numeric())
+async fn update_srp_credentials(
+    state: &AppState,
+    user_id: uuid::Uuid,
+    salt: &str,
+    verifier: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE users SET srp_salt = $1, srp_verifier = $2 WHERE id = $3")
+        .bind(salt)
+        .bind(verifier)
+        .bind(user_id)
+        .execute(state.db_pool.as_ref())
+        .await?;
+    Ok(())
 }
 
 async fn save_verification_code(
@@ -120,25 +121,50 @@ async fn save_verification_code(
     Ok(())
 }
 
+const MAX_VERIFICATION_ATTEMPTS: i32 = 5;
+
 async fn verify_code(
     state: &AppState,
     email: &str,
     code: &str,
     code_type: &str,
 ) -> Result<bool> {
-    let result: Option<(bool,)> = sqlx::query_as(
-        "SELECT used FROM verification_codes 
-         WHERE email = $1 AND code = $2 AND code_type = $3 
+    let result: Option<(uuid::Uuid, i32)> = sqlx::query_as(
+        "SELECT id, attempts FROM verification_codes 
+         WHERE email = $1 AND code_type = $2 
          AND expires_at > NOW() AND used = FALSE
          ORDER BY created_at DESC LIMIT 1",
     )
     .bind(email)
-    .bind(code)
     .bind(code_type)
     .fetch_optional(state.db_pool.as_ref())
     .await?;
 
-    Ok(result.is_some())
+    let (code_id, attempts) = match result {
+        Some(r) => r,
+        None => return Ok(false),
+    };
+
+    if attempts >= MAX_VERIFICATION_ATTEMPTS {
+        warn!(email = %email, "Verification code exhausted (max attempts reached)");
+        return Ok(false);
+    }
+
+    sqlx::query("UPDATE verification_codes SET attempts = attempts + 1 WHERE id = $1")
+        .bind(code_id)
+        .execute(state.db_pool.as_ref())
+        .await?;
+
+    let valid: Option<(bool,)> = sqlx::query_as(
+        "SELECT used FROM verification_codes 
+         WHERE id = $1 AND code = $2",
+    )
+    .bind(code_id)
+    .bind(code)
+    .fetch_optional(state.db_pool.as_ref())
+    .await?;
+
+    Ok(valid.is_some())
 }
 
 async fn mark_code_used(

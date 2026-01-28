@@ -1,14 +1,17 @@
 use std::sync::Arc;
 
 use chrono::{Duration, Utc};
+use hmac::{Hmac, Mac};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::models::{AccessTokenClaims, RefreshTokenClaims};
 use crate::services::SystemConfigService;
+
+type HmacSha256 = Hmac<Sha256>;
 
 pub struct TokenService {
     pool: Arc<PgPool>,
@@ -91,7 +94,7 @@ impl TokenService {
         let token = encode(&Header::default(), &claims, &encoding_key)
             .map_err(|_| AppError::Internal(anyhow::anyhow!("Failed to generate refresh token")))?;
 
-        let token_hash = hash_token(&token);
+        let token_hash = Self::hmac_hash_token(&token, &secret);
         sqlx::query(
             "INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
         )
@@ -115,7 +118,7 @@ impl TokenService {
                 _ => AppError::InvalidToken,
             })?;
 
-        let token_hash = hash_token(token);
+        let token_hash = Self::hmac_hash_token(token, &secret);
         let exists: Option<(bool,)> = sqlx::query_as(
             "SELECT revoked FROM refresh_tokens WHERE token_hash = $1 AND expires_at > NOW()",
         )
@@ -131,17 +134,66 @@ impl TokenService {
     }
 
     pub async fn revoke_refresh_token(&self, token: &str) -> Result<()> {
-        let token_hash = hash_token(token);
+        let secret = self.system_config.get_jwt_secret().await?;
+        let token_hash = Self::hmac_hash_token(token, &secret);
         sqlx::query("UPDATE refresh_tokens SET revoked = TRUE WHERE token_hash = $1")
             .bind(&token_hash)
             .execute(self.pool.as_ref())
             .await?;
         Ok(())
     }
+
+    fn hmac_hash_token(token: &str, secret: &str) -> String {
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+            .unwrap_or_else(|_| {
+                tracing::error!("HMAC initialization failed - this should never happen");
+                panic!("HMAC initialization failed with valid key")
+            });
+        mac.update(token.as_bytes());
+        hex::encode(mac.finalize().into_bytes())
+    }
 }
 
-fn hash_token(token: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(token.as_bytes());
-    hex::encode(hasher.finalize())
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hmac_hash_consistency() {
+        let token = "test_token_12345";
+        let secret = "my_secret_key";
+        
+        let hash1 = TokenService::hmac_hash_token(token, secret);
+        let hash2 = TokenService::hmac_hash_token(token, secret);
+        
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_hmac_hash_different_tokens() {
+        let secret = "my_secret_key";
+        
+        let hash1 = TokenService::hmac_hash_token("token_a", secret);
+        let hash2 = TokenService::hmac_hash_token("token_b", secret);
+        
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_hmac_hash_different_secrets() {
+        let token = "same_token";
+        
+        let hash1 = TokenService::hmac_hash_token(token, "secret_1");
+        let hash2 = TokenService::hmac_hash_token(token, "secret_2");
+        
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_hmac_hash_output_format() {
+        let hash = TokenService::hmac_hash_token("token", "secret");
+        
+        assert_eq!(hash.len(), 64);
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
 }

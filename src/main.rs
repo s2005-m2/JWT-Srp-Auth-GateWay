@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::sync::{atomic::AtomicU64, Arc};
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -14,7 +15,7 @@ use api::AppState;
 use config::AppConfig;
 use gateway::{JwtValidator, ProxyConfigCache};
 use gateway::config_cache::CachedRoute;
-use services::{AdminService, EmailService, ProxyConfigService, SystemConfigService, TokenService, UserService};
+use services::{AdminService, ApiKeyService, EmailService, ProxyConfigService, SrpService, SystemConfigService, TokenService, UserService};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -45,6 +46,8 @@ async fn main() -> anyhow::Result<()> {
     let email_service = Arc::new(EmailService::new(system_config_service.clone()));
     let admin_service = Arc::new(AdminService::new(db_pool.clone(), system_config_service.clone()));
     let proxy_config_service = Arc::new(ProxyConfigService::new(db_pool.clone()));
+    let api_key_service = Arc::new(ApiKeyService::new(db_pool.clone()));
+    let srp_service = Arc::new(SrpService::new(db_pool.clone()));
 
     let default_upstream = if config.upstream.default_upstream.is_empty() {
         None
@@ -90,6 +93,8 @@ async fn main() -> anyhow::Result<()> {
         admin_service,
         proxy_config_service,
         system_config_service,
+        api_key_service,
+        srp_service,
         jwt_validator: Some(jwt_validator.clone()),
         config_cache: Some(config_cache.clone()),
         request_counter,
@@ -105,9 +110,18 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let api_port = config.server.api_port;
+    let admin_port = config.server.admin_port;
+    let state_for_admin = state.clone();
+    
     tokio::spawn(async move {
-        if let Err(e) = run_api_server(state, api_port).await {
-            tracing::error!("API server failed: {}", e);
+        if let Err(e) = run_auth_server(state, api_port).await {
+            tracing::error!("Auth API server failed: {}", e);
+        }
+    });
+
+    tokio::spawn(async move {
+        if let Err(e) = run_admin_server(state_for_admin, admin_port).await {
+            tracing::error!("Admin API server failed: {}", e);
         }
     });
 
@@ -132,11 +146,27 @@ fn init_logging() {
         .init();
 }
 
-async fn run_api_server(state: AppState, port: u16) -> anyhow::Result<()> {
-    let app = api::create_router(state);
+async fn run_auth_server(state: AppState, port: u16) -> anyhow::Result<()> {
+    let app = api::create_auth_router(state);
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
-    tracing::info!("Auth API listening on 127.0.0.1:{} (internal only)", port);
-    axum::serve(listener, app).await?;
+    tracing::info!("Auth API listening on 127.0.0.1:{} (internal, proxied via gateway)", port);
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn run_admin_server(state: AppState, port: u16) -> anyhow::Result<()> {
+    let app = api::create_admin_router(state);
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
+    tracing::info!("Admin API listening on 0.0.0.0:{} (direct access, can be disabled)", port);
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
