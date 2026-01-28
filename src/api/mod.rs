@@ -67,6 +67,7 @@ pub fn create_admin_router(state: AppState) -> Router {
     let protected_admin_routes = Router::new()
         .route("/stats", get(handlers::get_stats))
         .route("/users", get(handlers::get_users))
+        .route("/users/:id", put(handlers::update_user_status).delete(handlers::delete_user))
         .route("/activities", get(handlers::get_activities))
         .layer(axum_middleware::from_fn_with_state(
             state.clone(),

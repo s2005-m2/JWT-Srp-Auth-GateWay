@@ -85,9 +85,15 @@ export const adminApi = {
     '/api/admin/activities'
   ),
 
-  getUsers: () => api<{ users: Array<{ id: string; email: string; email_verified: boolean; created_at: string }> }>(
+  getUsers: () => api<{ users: Array<{ id: string; email: string; email_verified: boolean; is_active: boolean; created_at: string }> }>(
     '/api/admin/users'
   ),
+
+  updateUserStatus: (id: string, is_active: boolean) =>
+    api<{ success: boolean }>(`/api/admin/users/${id}`, 'PUT', { is_active }),
+
+  deleteUser: (id: string) =>
+    api<{ success: boolean }>(`/api/admin/users/${id}`, 'DELETE'),
 };
 
 export const configApi = {

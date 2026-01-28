@@ -14,6 +14,7 @@ pub struct User {
     pub id: Uuid,
     pub email: String,
     pub email_verified: bool,
+    pub is_active: bool,
     pub srp_salt: Option<String>,
     pub srp_verifier: Option<String>,
     pub created_at: DateTime<Utc>,

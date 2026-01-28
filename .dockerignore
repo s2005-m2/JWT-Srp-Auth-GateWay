@@ -1,3 +1,5 @@
 target/
 .env
 *.pdb
+web/node_modules/
+web/dist/

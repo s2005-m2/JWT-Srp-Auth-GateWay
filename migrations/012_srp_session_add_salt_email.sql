@@ -1,0 +1,2 @@
+ALTER TABLE srp_sessions ADD COLUMN salt VARCHAR(64);
+ALTER TABLE srp_sessions ADD COLUMN email VARCHAR(255);

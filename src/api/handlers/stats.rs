@@ -1,10 +1,11 @@
-use axum::{extract::State, Json};
-use serde::Serialize;
+use axum::{extract::{Path, State}, Json};
+use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use std::sync::atomic::Ordering;
+use uuid::Uuid;
 
 use crate::api::AppState;
-use crate::error::Result;
+use crate::error::{AppError, Result};
 
 #[derive(Serialize)]
 pub struct StatsResponse {
@@ -18,9 +19,9 @@ pub struct StatsResponse {
 pub struct UserListItem {
     pub id: String,
     pub email: String,
-    pub status: String,
+    pub email_verified: bool,
+    pub is_active: bool,
     pub created_at: DateTime<Utc>,
-    pub last_login: Option<DateTime<Utc>>,
 }
 
 #[derive(Serialize)]
@@ -71,8 +72,8 @@ pub async fn get_stats(
 pub async fn get_users(
     State(state): State<AppState>,
 ) -> Result<Json<UserListResponse>> {
-    let users: Vec<(uuid::Uuid, String, bool, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT id, email, email_verified, created_at FROM users ORDER BY created_at DESC LIMIT 100"
+    let users: Vec<(uuid::Uuid, String, bool, bool, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT id, email, email_verified, is_active, created_at FROM users ORDER BY created_at DESC LIMIT 100"
     )
     .fetch_all(state.db_pool.as_ref())
     .await?;
@@ -83,12 +84,12 @@ pub async fn get_users(
 
     let user_list: Vec<UserListItem> = users
         .into_iter()
-        .map(|(id, email, email_verified, created_at)| UserListItem {
+        .map(|(id, email, email_verified, is_active, created_at)| UserListItem {
             id: id.to_string(),
             email,
-            status: if email_verified { "Active" } else { "Pending" }.to_string(),
+            email_verified,
+            is_active,
             created_at,
-            last_login: None,
         })
         .collect();
 
@@ -125,4 +126,43 @@ pub async fn get_activities(
         .collect();
 
     Ok(Json(ActivitiesResponse { activities }))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateUserStatusRequest {
+    pub is_active: bool,
+}
+
+pub async fn update_user_status(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+    Json(req): Json<UpdateUserStatusRequest>,
+) -> Result<Json<serde_json::Value>> {
+    let result = sqlx::query("UPDATE users SET is_active = $1, updated_at = NOW() WHERE id = $2")
+        .bind(req.is_active)
+        .bind(user_id)
+        .execute(state.db_pool.as_ref())
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+pub async fn delete_user(
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>> {
+    let result = sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(state.db_pool.as_ref())
+        .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(Json(serde_json::json!({ "success": true })))
 }
