@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use http::header::HeaderValue;
 use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::prelude::HttpPeer;
+use std::net::SocketAddr;
 use pingora::proxy::{ProxyHttp, Session};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
@@ -81,6 +82,17 @@ impl AuthGateway {
         let host = parts[0].to_string();
         let port = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(80);
         (host, port)
+    }
+
+    fn fallback_resolve(addr: &str) -> SocketAddr {
+        use std::net::ToSocketAddrs;
+        addr.to_socket_addrs()
+            .ok()
+            .and_then(|mut addrs| addrs.next())
+            .unwrap_or_else(|| {
+                let (host, port) = Self::parse_upstream(addr);
+                SocketAddr::new(host.parse().unwrap_or([127, 0, 0, 1].into()), port)
+            })
     }
 
     fn detect_connection_type(req: &RequestHeader) -> ConnectionType {
@@ -240,8 +252,11 @@ impl ProxyHttp for AuthGateway {
             .map(|r| r.upstream_address.as_str())
             .unwrap_or(self.config_cache.auth_upstream());
 
-        let (host, port) = Self::parse_upstream(addr);
-        let peer = HttpPeer::new((host.as_str(), port), false, String::new());
+        let socket_addr = self.config_cache
+            .get_resolved_addr(addr)
+            .unwrap_or_else(|| Self::fallback_resolve(addr));
+        
+        let peer = HttpPeer::new(socket_addr, false, String::new());
         Ok(Box::new(peer))
     }
 

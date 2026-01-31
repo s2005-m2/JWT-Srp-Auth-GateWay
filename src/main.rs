@@ -78,6 +78,9 @@ async fn main() -> anyhow::Result<()> {
     let config_cache = Arc::new(config_cache);
     load_proxy_config(&proxy_config_service, &config_cache).await?;
 
+    tracing::info!("Pre-resolving upstream DNS...");
+    config_cache.resolve_all_upstreams();
+
     initialize_admin_token(&admin_service).await?;
 
     let request_counter = Arc::new(AtomicU64::new(0));
