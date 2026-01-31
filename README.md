@@ -1,6 +1,8 @@
 # ARC Auth Gateway
 
-高性能鉴权网关，基于 Cloudflare Pingora + Axum 构建，提供用户认证和 API 网关能力。
+高性能鉴权网关，基于 Cloudflare Pingora + Axum 构建，提供用户邮箱注册/登录/认证/管理和 API 网关/服务反向代理/限流 能力。
+
+用于将算法服务保护在鉴权网关之后。
 
 ## 特性
 
