@@ -6,6 +6,17 @@ High-performance authentication gateway built on Cloudflare Pingora + Axum, prov
 
 Designed to protect algorithm services behind an authentication gateway.
 
+## Quick Deploy (Docker)
+
+```bash
+docker pull whereslow/arc_auth:latest
+docker-compose up -d
+```
+
+Services:
+- Gateway: http://localhost:8080
+- Admin: http://localhost:3002
+
 ## Features
 
 - **High-Performance Proxy**: Built on Pingora (Cloudflare's production-grade proxy framework)
@@ -53,7 +64,7 @@ Edit `config/local.toml`:
 url = "postgres://user:password@localhost:5432/arc_auth"
 ```
 
-### 3. Run
+### 3. Run (from source)
 
 ```bash
 cargo run

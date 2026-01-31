@@ -4,6 +4,17 @@
 
 用于将算法服务保护在鉴权网关之后。
 
+## 快速部署 (Docker)
+
+```bash
+docker pull whereslow/arc_auth:latest
+docker-compose up -d
+```
+
+服务地址：
+- Gateway: http://localhost:8080
+- Admin: http://localhost:3002
+
 ## 特性
 
 - **高性能代理**: 基于 Pingora (Cloudflare 生产级代理框架)
@@ -51,7 +62,7 @@ cp config/default.toml config/local.toml
 url = "postgres://user:password@localhost:5432/arc_auth"
 ```
 
-### 3. 运行
+### 3. 运行 (从源码)
 
 ```bash
 cargo run

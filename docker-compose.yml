@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: docker.xuanyuan.run/postgres:16-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -16,7 +16,7 @@ services:
       retries: 5
 
   arc_auth:
-    build: .
+    image: whereslow/arc_auth:latest
     ports:
       - "8080:8080"
       - "3002:3002"
