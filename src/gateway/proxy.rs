@@ -114,7 +114,10 @@ impl AuthGateway {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
+        debug!(accept = %accept, "Checking Accept header for SSE");
+
         if accept.contains("text/event-stream") {
+            info!("SSE connection detected via Accept header");
             return ConnectionType::Sse;
         }
 
@@ -311,16 +314,31 @@ impl ProxyHttp for AuthGateway {
 
     async fn response_filter(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         upstream_response: &mut ResponseHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
         let status = upstream_response.status.as_u16();
+        let content_type = upstream_response
+            .headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown");
+        
         info!(
             req_id = %ctx.request_id,
             status = %status,
+            content_type = %content_type,
+            conn_type = ?ctx.connection_type,
             "Response"
         );
+
+        if ctx.connection_type == ConnectionType::Sse {
+            info!(req_id = %ctx.request_id, "Disabling compression for SSE");
+            session.upstream_compression.adjust_level(0);
+            upstream_response.insert_header("X-Accel-Buffering", "no")?;
+            upstream_response.insert_header("Cache-Control", "no-cache")?;
+        }
         
         if ctx.should_refresh {
             upstream_response.insert_header("X-Token-Refresh", "true")?;
@@ -330,5 +348,24 @@ impl ProxyHttp for AuthGateway {
         upstream_response.insert_header("Access-Control-Expose-Headers", "X-Token-Refresh")?;
 
         Ok(())
+    }
+
+    fn response_body_filter(
+        &self,
+        _session: &mut Session,
+        body: &mut Option<bytes::Bytes>,
+        end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> Result<Option<std::time::Duration>> {
+        if ctx.connection_type == ConnectionType::Sse {
+            let size = body.as_ref().map(|b| b.len()).unwrap_or(0);
+            debug!(
+                req_id = %ctx.request_id,
+                size = size,
+                end_of_stream = end_of_stream,
+                "SSE body chunk"
+            );
+        }
+        Ok(None)
     }
 }

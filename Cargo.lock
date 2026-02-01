@@ -103,6 +103,7 @@ dependencies = [
  "argon2",
  "async-trait",
  "axum",
+ "bytes",
  "chrono",
  "config",
  "dotenvy",
