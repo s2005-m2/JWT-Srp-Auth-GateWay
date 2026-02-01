@@ -190,16 +190,17 @@ async fn initialize_admin_token(admin_service: &AdminService) -> anyhow::Result<
 
 fn start_gateway(config: Arc<AppConfig>, jwt_validator: Arc<JwtValidator>, config_cache: Arc<ProxyConfigCache>) {
     use pingora::server::Server;
+    use pingora::server::configuration::ServerConf;
     use pingora::proxy::http_proxy_service;
     use gateway::proxy::AuthGateway;
 
-    let mut server = match Server::new(None) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("Failed to create Pingora server: {}", e);
-            return;
-        }
-    };
+    let mut server_conf = ServerConf::default();
+    server_conf.threads = std::cmp::max(num_cpus::get()*2-1, 2);
+    server_conf.work_stealing = true;
+    
+    tracing::info!("Pingora config: threads={}, work_stealing={}", server_conf.threads, server_conf.work_stealing);
+
+    let mut server = Server::new_with_opt_and_conf(None, server_conf);
     server.bootstrap();
 
     let gateway = AuthGateway::new(jwt_validator, config_cache);

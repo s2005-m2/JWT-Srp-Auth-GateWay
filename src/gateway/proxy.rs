@@ -141,6 +141,9 @@ impl ProxyHttp for AuthGateway {
     }
 
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
+        let filter_start = std::time::Instant::now();
+        info!(req_id = %ctx.request_id, "request_filter START");
+        
         let method = session.req_header().method.as_str();
         let path = session.req_header().uri.path();
         let query = session.req_header().uri.query().unwrap_or("");
@@ -241,6 +244,7 @@ impl ProxyHttp for AuthGateway {
         }
 
         ctx.matched_route = Some(matched);
+        info!(req_id = %ctx.request_id, elapsed = ?filter_start.elapsed(), "request_filter END");
         Ok(false)
     }
 
@@ -249,6 +253,7 @@ impl ProxyHttp for AuthGateway {
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
+        let start = std::time::Instant::now();
         let addr = ctx
             .matched_route
             .as_ref()
@@ -258,6 +263,14 @@ impl ProxyHttp for AuthGateway {
         let socket_addr = self.config_cache
             .get_resolved_addr(addr)
             .unwrap_or_else(|| Self::fallback_resolve(addr));
+        
+        info!(
+            req_id = %ctx.request_id,
+            upstream = %addr,
+            resolved = %socket_addr,
+            elapsed = ?start.elapsed(),
+            "upstream_peer resolved"
+        );
         
         let peer = HttpPeer::new(socket_addr, false, String::new());
         Ok(Box::new(peer))
