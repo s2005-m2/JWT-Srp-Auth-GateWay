@@ -1,8 +1,8 @@
-> 📍 子系统文档，全局架构见 [根 AGENTS.md](../AGENTS.md)
+> 📍 Subsystem docs, see [root AGENTS.md](../AGENTS.md) for full architecture
 
 # ARC_AUTH KNOWLEDGE BASE
 
-**Updated:** 2026-01-28
+**Generated:** 2026-02-09 | **Commit:** cb15430 | **Branch:** master
 
 ## OVERVIEW
 
@@ -127,6 +127,14 @@ pub async fn login(
 | Use `unwrap()` in handlers | Return `AppError` instead |
 | Skip structured logging | Always use `tracing` macros with fields |
 | Allow X-User-Id/X-Request-Id from client | Gateway rejects these (header spoofing protection) |
+
+## WORKFLOW RULE: UNWRAP AUDIT
+
+**Every task's final todo MUST be an `unwrap()` audit.** Before marking work complete:
+1. Search all changed/new `.rs` files for `.unwrap()`, `.expect()`
+2. Replace each with proper error handling (`?`, `map_err`, `unwrap_or_else`, `match`)
+3. Add `tracing::warn!` or `tracing::error!` at each recovery point so failures leave a trace
+4. Zero `unwrap()` in handler/service code — no exceptions
 
 ## ARCHITECTURE
 
