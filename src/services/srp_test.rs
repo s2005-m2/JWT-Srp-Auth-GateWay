@@ -15,7 +15,7 @@ mod tests {
 
         let expected_m1 = "d8e05194652688047c0acd1785fb793d2c8eca81dbd7de7aede00a4f78741ae6";
 
-        let m1 = compute_m1(email, &salt, &a_pub, &b_pub, &session_key);
+        let m1 = compute_m1(email, &salt, &a_pub, &b_pub, &session_key).unwrap();
         let m1_hex = hex::encode(&m1);
 
         println!("Expected M1: {}", expected_m1);

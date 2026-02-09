@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use chrono::{Duration, Utc};
 use num_bigint::BigUint;
 use sha2::{Sha256, Digest};
@@ -7,8 +9,11 @@ use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 
-lazy_static::lazy_static! {
-    static ref N: BigUint = BigUint::parse_bytes(
+static N: OnceLock<Option<BigUint>> = OnceLock::new();
+static G: OnceLock<BigUint> = OnceLock::new();
+
+fn init_n() -> Option<BigUint> {
+    BigUint::parse_bytes(
         b"AC6BDB41324A9A9BF166DE5E1389582FAF72B6651987EE07FC3192943DB56050\
           A37329CBB4A099ED8193E0757767A13DD52312AB4B03310DCD7F48A9DA04FD50\
           E8083969EDB767B0CF6095179A163AB3661A05FBD5FAAAE82918A9962F0B93B8\
@@ -17,19 +22,32 @@ lazy_static::lazy_static! {
           544523B524B0D57D5EA77A2775D2ECFA032CFBDBF52FB3786160279004E57AE6\
           AF874E7303CE53299CCC041C7BC308D82A5698F3A8D0C38271AE35F8E9DBFBB6\
           94B5C803D89F7AE435DE236D525F54759B65E372FCD68EF20FA7111F9E4AFF73",
-        16
-    ).unwrap();
-    static ref G: BigUint = BigUint::from(2u32);
+        16,
+    )
 }
 
-fn compute_k() -> BigUint {
-    let n_bytes = N.to_bytes_be();
-    let g_bytes = G.to_bytes_be();
+fn get_n() -> Result<&'static BigUint> {
+    let val = N.get_or_init(|| init_n());
+    val.as_ref().ok_or_else(|| {
+        tracing::error!("SRP: failed to parse hardcoded prime N");
+        AppError::Internal(anyhow::anyhow!("SRP parameter N initialization failed"))
+    })
+}
+
+fn get_g() -> Result<&'static BigUint> {
+    Ok(G.get_or_init(|| BigUint::from(2u32)))
+}
+
+fn compute_k() -> Result<BigUint> {
+    let n = get_n()?;
+    let g = get_g()?;
+    let n_bytes = n.to_bytes_be();
+    let g_bytes = g.to_bytes_be();
     
     let mut hasher = Sha256::new();
     hasher.update(&n_bytes);
     hasher.update(&g_bytes);
-    BigUint::from_bytes_be(&hasher.finalize())
+    Ok(BigUint::from_bytes_be(&hasher.finalize()))
 }
 
 fn compute_u(a_pub: &[u8], b_pub: &[u8]) -> BigUint {
@@ -39,9 +57,11 @@ fn compute_u(a_pub: &[u8], b_pub: &[u8]) -> BigUint {
     BigUint::from_bytes_be(&hasher.finalize())
 }
 
-fn compute_m1(identity: &str, salt: &[u8], a_pub: &[u8], b_pub: &[u8], k: &[u8]) -> Vec<u8> {
-    let n_bytes = N.to_bytes_be();
-    let g_bytes = G.to_bytes_be();
+fn compute_m1(identity: &str, salt: &[u8], a_pub: &[u8], b_pub: &[u8], k: &[u8]) -> Result<Vec<u8>> {
+    let n = get_n()?;
+    let g = get_g()?;
+    let n_bytes = n.to_bytes_be();
+    let g_bytes = g.to_bytes_be();
     
     let h_n: Vec<u8> = Sha256::digest(&n_bytes).to_vec();
     let h_g: Vec<u8> = Sha256::digest(&g_bytes).to_vec();
@@ -56,7 +76,7 @@ fn compute_m1(identity: &str, salt: &[u8], a_pub: &[u8], b_pub: &[u8], k: &[u8])
     hasher.update(a_pub);
     hasher.update(b_pub);
     hasher.update(k);
-    hasher.finalize().to_vec()
+    Ok(hasher.finalize().to_vec())
 }
 
 fn compute_m2(a_pub: &[u8], m1: &[u8], k: &[u8]) -> Vec<u8> {
@@ -67,12 +87,14 @@ fn compute_m2(a_pub: &[u8], m1: &[u8], k: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
-fn compute_b_pub(b: &[u8], verifier: &[u8]) -> Vec<u8> {
-    let k = compute_k();
+fn compute_b_pub(b: &[u8], verifier: &[u8]) -> Result<Vec<u8>> {
+    let n = get_n()?;
+    let g = get_g()?;
+    let k = compute_k()?;
     let v = BigUint::from_bytes_be(verifier);
     let b_int = BigUint::from_bytes_be(b);
-    let b_pub = (&k * &v + G.modpow(&b_int, &*N)) % &*N;
-    b_pub.to_bytes_be()
+    let b_pub = (&k * &v + g.modpow(&b_int, n)) % n;
+    Ok(b_pub.to_bytes_be())
 }
 
 pub struct SrpService {
@@ -97,13 +119,15 @@ impl SrpService {
         salt
     }
 
-    pub fn compute_verifier(identity: &str, password: &str, salt: &[u8]) -> Vec<u8> {
+    pub fn compute_verifier(identity: &str, password: &str, salt: &[u8]) -> Result<Vec<u8>> {
+        let n = get_n()?;
+        let g = get_g()?;
         let identity_hash = Sha256::digest(format!("{}:{}", identity, password).as_bytes());
         let mut x_hasher = Sha256::new();
         x_hasher.update(salt);
         x_hasher.update(&identity_hash);
         let x = BigUint::from_bytes_be(&x_hasher.finalize());
-        G.modpow(&x, &*N).to_bytes_be()
+        Ok(g.modpow(&x, n).to_bytes_be())
     }
 
     pub async fn store_verifier(
@@ -157,7 +181,7 @@ impl SrpService {
         let mut b = [0u8; 32];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut b);
         
-        let b_pub = compute_b_pub(&b, &verifier);
+        let b_pub = compute_b_pub(&b, &verifier)?;
 
         let session_id = self
             .store_session(user_id, email, &salt, &b, &client_public, &verifier)
@@ -208,16 +232,17 @@ impl SrpService {
         let client_proof = hex::decode(client_proof_hex)
             .map_err(|_| AppError::InvalidRequest("Invalid client proof".into()))?;
 
-        let b_pub = compute_b_pub(&session.server_secret, &session.verifier);
+        let b_pub = compute_b_pub(&session.server_secret, &session.verifier)?;
         
         let u = compute_u(&session.client_public, &b_pub);
-        let _k = compute_k();
+        let _k = compute_k()?;
         
+        let n = get_n()?;
         let a_pub = BigUint::from_bytes_be(&session.client_public);
         let v = BigUint::from_bytes_be(&session.verifier);
         let b = BigUint::from_bytes_be(&session.server_secret);
         
-        let s = (&a_pub * v.modpow(&u, &*N)).modpow(&b, &*N);
+        let s = (&a_pub * v.modpow(&u, n)).modpow(&b, n);
         let session_key: Vec<u8> = Sha256::digest(&s.to_bytes_be()).to_vec();
         
         let expected_m1 = compute_m1(
@@ -226,7 +251,7 @@ impl SrpService {
             &session.client_public,
             &b_pub,
             &session_key,
-        );
+        )?;
 
         if client_proof != expected_m1 {
             return Err(AppError::InvalidCredentials);
@@ -315,7 +340,7 @@ mod tests {
         
         let expected_m1 = "d8e05194652688047c0acd1785fb793d2c8eca81dbd7de7aede00a4f78741ae6";
         
-        let m1 = compute_m1(email, &salt, &a_pub, &b_pub, &session_key);
+        let m1 = compute_m1(email, &salt, &a_pub, &b_pub, &session_key).unwrap();
         let m1_hex = hex::encode(&m1);
         
         println!("Expected M1: {}", expected_m1);
@@ -326,15 +351,15 @@ mod tests {
 
     #[test]
     fn test_k_matches_js() {
-        let n_bytes = N.to_bytes_be();
-        let g_bytes = G.to_bytes_be();
+        let n_bytes = get_n().unwrap().to_bytes_be();
+        let g_bytes = get_g().unwrap().to_bytes_be();
         
         println!("N bytes len: {}", n_bytes.len());
         println!("g bytes len: {}", g_bytes.len());
         println!("N hex: {}", hex::encode(&n_bytes));
         println!("g hex: {}", hex::encode(&g_bytes));
         
-        let k = compute_k();
+        let k = compute_k().unwrap();
         let k_hex = hex::encode(&k.to_bytes_be());
         let expected_k = "4cba3fb2923e01fb263ddbbb185a01c131c638f2561942e437727e02ca3c266d";
         println!("Expected k: {}", expected_k);
@@ -350,7 +375,7 @@ mod tests {
         let b_pub_expected = hex::decode("132e13eba3b32d5eae53a78149ac22a7d20924e8800af68c95f1f1a104064f96047e8659ea6d25fd9217bd41331042ec080844b6af08d5c85c8cf67b1e2d5523368fab95b3cad74606a4938ad5d89ca5c179f92145ccebb27e3ed328e3d7fc2a8f7d996be59e77df8b06c27a0428d6854d657c0f0aa29c6352e56b31da669b03d43e53c187a84ca9ae52a2001121d7e5f925c731212bcbd97335242828d50e9007c4e91c87b6dfbe14a0006558230ef54379f3d6281f0676940e2359230de4e87f7a850459318990ada910dc1aa4821dde4dedc19b5fc408f233998b3d923463f90e9638f28e75c7e7e0258fc778a4446bff314c8e6cd1dba8351735c8ab81e6").unwrap();
         let expected_session_key = "ba22fca411d0b150fd7fe84b8981512c05251df092f97a468380eb1796c69f06";
 
-        let b_pub_calc = compute_b_pub(&b_secret, &verifier);
+        let b_pub_calc = compute_b_pub(&b_secret, &verifier).unwrap();
         println!("B expected: {}", hex::encode(&b_pub_expected));
         println!("B computed: {}", hex::encode(&b_pub_calc));
         assert_eq!(b_pub_calc, b_pub_expected, "B public mismatch");
@@ -360,7 +385,8 @@ mod tests {
         let b = BigUint::from_bytes_be(&b_secret);
         let u = compute_u(&a_pub, &b_pub_expected);
         
-        let s = (&a * v.modpow(&u, &*N)).modpow(&b, &*N);
+        let n = get_n().unwrap();
+        let s = (&a * v.modpow(&u, n)).modpow(&b, n);
         let session_key: Vec<u8> = Sha256::digest(&s.to_bytes_be()).to_vec();
         
         println!("Expected K: {}", expected_session_key);

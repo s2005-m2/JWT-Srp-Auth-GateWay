@@ -122,7 +122,13 @@ fn is_valid_domain(domain: &str) -> bool {
         }
     }
     
-    let tld = labels.last().unwrap();
+    let tld = match labels.last() {
+        Some(t) => t,
+        None => {
+            tracing::warn!(domain = %domain, "Domain validation: labels unexpectedly empty");
+            return false;
+        }
+    };
     if tld.chars().all(|c| c.is_ascii_digit()) {
         return false;
     }
