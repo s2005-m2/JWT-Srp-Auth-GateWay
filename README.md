@@ -2,7 +2,9 @@
 
 [中文文档](docs/app/cn_Zh_README.md) | English
 
-High-performance authentication gateway built on Cloudflare Pingora + Axum, providing user email registration/login/authentication/management and API gateway/reverse proxy/rate limiting capabilities.
+High-performance authentication gateway built on Cloudflare Pingora + Axum, providing JWT-based authentication, user email registration/login/management and API gateway/reverse proxy/rate limiting capabilities.
+
+All API and WebSocket/SSE requests are verified via JWT (Access Token + Refresh Token) at the gateway layer before reaching upstream services.
 
 Designed to protect algorithm services behind an authentication gateway.
 
