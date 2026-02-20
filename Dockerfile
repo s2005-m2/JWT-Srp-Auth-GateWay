@@ -35,6 +35,7 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs
 
 # Downgrade incompatible deps and build
 RUN cargo update home@0.5.12 --precise 0.5.9 && \
+    cargo update time@0.3.47 --precise 0.3.41 && \
     cargo build --release && rm -rf src target/release/deps/arc_auth*
 
 # Copy actual source
