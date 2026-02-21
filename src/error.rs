@@ -13,6 +13,9 @@ pub enum AppError {
     #[error("Invalid verification code")]
     InvalidCode,
 
+    #[error("Invalid captcha")]
+    InvalidCaptcha,
+
     #[error("Password does not meet requirements")]
     WeakPassword,
 
@@ -71,6 +74,7 @@ impl AppError {
         match self {
             Self::InvalidEmail
             | Self::InvalidCode
+            | Self::InvalidCaptcha
             | Self::WeakPassword
             | Self::InvalidRequest(_) => StatusCode::BAD_REQUEST,
             Self::InvalidCredentials
@@ -89,6 +93,7 @@ impl AppError {
         match self {
             Self::InvalidEmail => "INVALID_EMAIL",
             Self::InvalidCode => "INVALID_CODE",
+            Self::InvalidCaptcha => "INVALID_CAPTCHA",
             Self::WeakPassword => "WEAK_PASSWORD",
             Self::InvalidRequest(_) => "INVALID_REQUEST",
             Self::InvalidCredentials => "INVALID_CREDENTIALS",
@@ -167,6 +172,12 @@ impl AppError {
                 tracing::info!(
                     error_code = "INVALID_CODE",
                     "Validation: invalid verification code"
+                );
+            }
+            Self::InvalidCaptcha => {
+                tracing::info!(
+                    error_code = "INVALID_CAPTCHA",
+                    "Validation: invalid captcha"
                 );
             }
             Self::WeakPassword => {

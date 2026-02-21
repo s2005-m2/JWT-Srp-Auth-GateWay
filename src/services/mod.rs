@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod api_key;
+pub mod captcha;
 pub mod email;
 pub mod proxy_config;
 pub mod srp;
@@ -9,6 +10,7 @@ pub mod user;
 
 pub use admin::AdminService;
 pub use api_key::ApiKeyService;
+pub use captcha::CaptchaService;
 pub use email::EmailService;
 pub use proxy_config::ProxyConfigService;
 pub use srp::SrpService;

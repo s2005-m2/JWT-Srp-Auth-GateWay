@@ -34,7 +34,7 @@ pub async fn verify(
          WHERE email = $1 AND code_type = $2 
          AND expires_at > NOW() AND used = FALSE
          ORDER BY created_at DESC LIMIT 1
-         FOR UPDATE SKIP LOCKED"
+         FOR UPDATE SKIP LOCKED",
     )
     .bind(&req.email)
     .bind("register")
@@ -56,13 +56,12 @@ pub async fn verify(
         .execute(&mut *tx)
         .await?;
 
-    let valid: Option<(bool,)> = sqlx::query_as(
-        "SELECT used FROM verification_codes WHERE id = $1 AND code = $2"
-    )
-    .bind(code_id)
-    .bind(&req.code)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let valid: Option<(bool,)> =
+        sqlx::query_as("SELECT used FROM verification_codes WHERE id = $1 AND code = $2")
+            .bind(code_id)
+            .bind(&req.code)
+            .fetch_optional(&mut *tx)
+            .await?;
 
     if valid.is_none() {
         tx.commit().await?;
@@ -75,10 +74,13 @@ pub async fn verify(
         .await?;
 
     let user_id = create_user_srp(&mut tx, &req.email, &req.salt, &req.verifier).await?;
-    
+
     tx.commit().await?;
 
-    let access = state.token_service.generate_access_token(user_id, &req.email).await?;
+    let access = state
+        .token_service
+        .generate_access_token(user_id, &req.email)
+        .await?;
     let refresh = state.token_service.generate_refresh_token(user_id).await?;
 
     Ok(Json(AuthResponse {
@@ -99,7 +101,7 @@ async fn create_user_srp(
 ) -> Result<uuid::Uuid> {
     let (id,): (uuid::Uuid,) = sqlx::query_as(
         "INSERT INTO users (email, email_verified, srp_salt, srp_verifier) 
-         VALUES ($1, TRUE, $2, $3) RETURNING id"
+         VALUES ($1, TRUE, $2, $3) RETURNING id",
     )
     .bind(email)
     .bind(salt)

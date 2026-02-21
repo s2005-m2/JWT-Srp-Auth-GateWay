@@ -62,8 +62,10 @@ impl TokenService {
         let decoding_key = DecodingKey::from_secret(secret.as_bytes());
 
         let validation = Validation::default();
-        let token_data = decode::<AccessTokenClaims>(token, &decoding_key, &validation)
-            .map_err(|e| match e.kind() {
+        let token_data =
+            decode::<AccessTokenClaims>(token, &decoding_key, &validation).map_err(|e| match e
+                .kind()
+            {
                 jsonwebtoken::errors::ErrorKind::ExpiredSignature => AppError::TokenExpired,
                 _ => AppError::InvalidToken,
             })?;
@@ -112,8 +114,10 @@ impl TokenService {
         let decoding_key = DecodingKey::from_secret(secret.as_bytes());
 
         let validation = Validation::default();
-        let token_data = decode::<RefreshTokenClaims>(token, &decoding_key, &validation)
-            .map_err(|e| match e.kind() {
+        let token_data =
+            decode::<RefreshTokenClaims>(token, &decoding_key, &validation).map_err(|e| match e
+                .kind()
+            {
                 jsonwebtoken::errors::ErrorKind::ExpiredSignature => AppError::TokenExpired,
                 _ => AppError::InvalidToken,
             })?;
@@ -144,11 +148,10 @@ impl TokenService {
     }
 
     fn hmac_hash_token(token: &str, secret: &str) -> String {
-        let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-            .unwrap_or_else(|_| {
-                tracing::error!("HMAC initialization failed - this should never happen");
-                panic!("HMAC initialization failed with valid key")
-            });
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap_or_else(|_| {
+            tracing::error!("HMAC initialization failed - this should never happen");
+            panic!("HMAC initialization failed with valid key")
+        });
         mac.update(token.as_bytes());
         hex::encode(mac.finalize().into_bytes())
     }
@@ -162,37 +165,37 @@ mod tests {
     fn test_hmac_hash_consistency() {
         let token = "test_token_12345";
         let secret = "my_secret_key";
-        
+
         let hash1 = TokenService::hmac_hash_token(token, secret);
         let hash2 = TokenService::hmac_hash_token(token, secret);
-        
+
         assert_eq!(hash1, hash2);
     }
 
     #[test]
     fn test_hmac_hash_different_tokens() {
         let secret = "my_secret_key";
-        
+
         let hash1 = TokenService::hmac_hash_token("token_a", secret);
         let hash2 = TokenService::hmac_hash_token("token_b", secret);
-        
+
         assert_ne!(hash1, hash2);
     }
 
     #[test]
     fn test_hmac_hash_different_secrets() {
         let token = "same_token";
-        
+
         let hash1 = TokenService::hmac_hash_token(token, "secret_1");
         let hash2 = TokenService::hmac_hash_token(token, "secret_2");
-        
+
         assert_ne!(hash1, hash2);
     }
 
     #[test]
     fn test_hmac_hash_output_format() {
         let hash = TokenService::hmac_hash_token("token", "secret");
-        
+
         assert_eq!(hash.len(), 64);
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }

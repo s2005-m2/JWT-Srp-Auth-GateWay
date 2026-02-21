@@ -88,10 +88,7 @@ pub async fn update_route(
     Ok(Json(route))
 }
 
-pub async fn delete_route(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<()>> {
+pub async fn delete_route(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<Json<()>> {
     state.proxy_config_service.delete_route(id).await?;
     refresh_route_cache(&state).await;
     Ok(Json(()))
@@ -127,7 +124,13 @@ pub async fn create_rate_limit(
 ) -> Result<Json<RateLimitRule>> {
     let rule = state
         .proxy_config_service
-        .create_rate_limit(&req.name, &req.path_pattern, &req.limit_by, req.max_requests, req.window_secs)
+        .create_rate_limit(
+            &req.name,
+            &req.path_pattern,
+            &req.limit_by,
+            req.max_requests,
+            req.window_secs,
+        )
         .await?;
     Ok(Json(rule))
 }
@@ -139,7 +142,15 @@ pub async fn update_rate_limit(
 ) -> Result<Json<RateLimitRule>> {
     let rule = state
         .proxy_config_service
-        .update_rate_limit(id, &req.name, &req.path_pattern, &req.limit_by, req.max_requests, req.window_secs, req.enabled)
+        .update_rate_limit(
+            id,
+            &req.name,
+            &req.path_pattern,
+            &req.limit_by,
+            req.max_requests,
+            req.window_secs,
+            req.enabled,
+        )
         .await?;
     Ok(Json(rule))
 }
@@ -170,7 +181,11 @@ pub async fn update_jwt_config(
 ) -> Result<Json<JwtConfigRow>> {
     let config = state
         .proxy_config_service
-        .update_jwt_config(req.access_token_ttl_secs, req.refresh_token_ttl_secs, req.auto_refresh_threshold_secs)
+        .update_jwt_config(
+            req.access_token_ttl_secs,
+            req.refresh_token_ttl_secs,
+            req.auto_refresh_threshold_secs,
+        )
         .await?;
     Ok(Json(config))
 }

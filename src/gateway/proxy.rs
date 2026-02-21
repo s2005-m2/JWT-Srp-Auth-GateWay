@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use http::header::HeaderValue;
 use pingora::http::{RequestHeader, ResponseHeader};
 use pingora::prelude::HttpPeer;
-use std::net::SocketAddr;
 use pingora::proxy::{ProxyHttp, Session};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -20,7 +20,9 @@ impl AuthGateway {
         header.insert_header("Content-Type", "application/json")?;
         header.insert_header("Content-Length", body.len().to_string())?;
         header.insert_header("Access-Control-Allow-Origin", "*")?;
-        session.write_response_header(Box::new(header), true).await?;
+        session
+            .write_response_header(Box::new(header), true)
+            .await?;
         session.write_response_body(Some(body.into()), true).await?;
         Ok(true)
     }
@@ -28,10 +30,18 @@ impl AuthGateway {
     async fn send_cors_preflight(&self, session: &mut Session) -> Result<bool> {
         let mut header = ResponseHeader::build(204, None)?;
         header.insert_header("Access-Control-Allow-Origin", "*")?;
-        header.insert_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")?;
-        header.insert_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")?;
+        header.insert_header(
+            "Access-Control-Allow-Methods",
+            "GET, POST, PUT, DELETE, OPTIONS",
+        )?;
+        header.insert_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, X-API-Key",
+        )?;
         header.insert_header("Access-Control-Max-Age", "86400")?;
-        session.write_response_header(Box::new(header), true).await?;
+        session
+            .write_response_header(Box::new(header), true)
+            .await?;
         Ok(true)
     }
 }
@@ -57,13 +67,8 @@ pub struct RequestCtx {
     pub origin: Option<String>,
 }
 
-
-
 impl AuthGateway {
-    pub fn new(
-        jwt_validator: Arc<JwtValidator>,
-        config_cache: Arc<ProxyConfigCache>,
-    ) -> Self {
+    pub fn new(jwt_validator: Arc<JwtValidator>, config_cache: Arc<ProxyConfigCache>) -> Self {
         Self {
             jwt_validator,
             config_cache,
@@ -143,7 +148,7 @@ impl ProxyHttp for AuthGateway {
     async fn request_filter(&self, session: &mut Session, ctx: &mut Self::CTX) -> Result<bool> {
         let filter_start = std::time::Instant::now();
         info!(req_id = %ctx.request_id, "request_filter START");
-        
+
         let method = session.req_header().method.as_str();
         let path = session.req_header().uri.path();
         let query = session.req_header().uri.query().unwrap_or("");
@@ -158,7 +163,7 @@ impl ProxyHttp for AuthGateway {
         if method == "OPTIONS" {
             return self.send_cors_preflight(session).await;
         }
-        
+
         let headers = &session.req_header().headers;
         if headers.contains_key("x-user-id") || headers.contains_key("x-request-id") {
             warn!(
@@ -167,7 +172,9 @@ impl ProxyHttp for AuthGateway {
                 path = %path,
                 "Rejected: reserved header detected"
             );
-            return self.send_error(session, 400, "Reserved header detected").await;
+            return self
+                .send_error(session, 400, "Reserved header detected")
+                .await;
         }
 
         ctx.connection_type = Self::detect_connection_type(session.req_header());
@@ -260,10 +267,11 @@ impl ProxyHttp for AuthGateway {
             .map(|r| r.upstream_address.as_str())
             .unwrap_or(self.config_cache.auth_upstream());
 
-        let socket_addr = self.config_cache
+        let socket_addr = self
+            .config_cache
             .get_resolved_addr(addr)
             .unwrap_or_else(|| Self::fallback_resolve(addr));
-        
+
         info!(
             req_id = %ctx.request_id,
             upstream = %addr,
@@ -271,7 +279,7 @@ impl ProxyHttp for AuthGateway {
             elapsed = ?start.elapsed(),
             "upstream_peer resolved"
         );
-        
+
         let peer = HttpPeer::new(socket_addr, false, String::new());
         Ok(Box::new(peer))
     }
@@ -287,20 +295,27 @@ impl ProxyHttp for AuthGateway {
                 let original_uri = upstream_request.uri.clone();
                 let path = original_uri.path();
                 let stripped = path.strip_prefix(prefix.as_str()).unwrap_or(path);
-                
+
                 let new_path = if stripped.is_empty() || !stripped.starts_with('/') {
                     format!("/{}", stripped.trim_start_matches('/'))
                 } else {
                     stripped.to_string()
                 };
-                let new_path = if new_path.is_empty() { "/".to_string() } else { new_path };
-                
+                let new_path = if new_path.is_empty() {
+                    "/".to_string()
+                } else {
+                    new_path
+                };
+
                 let path_and_query = match original_uri.query() {
                     Some(q) => format!("{}?{}", new_path, q),
                     None => new_path,
                 };
-                
-                match http::Uri::builder().path_and_query(path_and_query.as_str()).build() {
+
+                match http::Uri::builder()
+                    .path_and_query(path_and_query.as_str())
+                    .build()
+                {
                     Ok(uri) => upstream_request.set_uri(uri),
                     Err(e) => {
                         warn!(
@@ -337,7 +352,7 @@ impl ProxyHttp for AuthGateway {
             .get("content-type")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("unknown");
-        
+
         info!(
             req_id = %ctx.request_id,
             status = %status,
@@ -352,7 +367,7 @@ impl ProxyHttp for AuthGateway {
             upstream_response.insert_header("X-Accel-Buffering", "no")?;
             upstream_response.insert_header("Cache-Control", "no-cache")?;
         }
-        
+
         if ctx.should_refresh {
             upstream_response.insert_header("X-Token-Refresh", "true")?;
         }

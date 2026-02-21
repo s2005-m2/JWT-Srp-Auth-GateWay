@@ -1,6 +1,9 @@
-use axum::{extract::{Path, State}, Json};
-use serde::{Deserialize, Serialize};
+use axum::{
+    extract::{Path, State},
+    Json,
+};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::Ordering;
 use uuid::Uuid;
 
@@ -50,11 +53,9 @@ fn get_server_start_time() -> DateTime<Utc> {
     *SERVER_START_TIME.get_or_init(Utc::now)
 }
 
-pub async fn get_stats(
-    State(state): State<AppState>,
-) -> Result<Json<StatsResponse>> {
+pub async fn get_stats(State(state): State<AppState>) -> Result<Json<StatsResponse>> {
     let active_users: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*)::BIGINT FROM users WHERE created_at > NOW() - INTERVAL '30 days'"
+        "SELECT COUNT(*)::BIGINT FROM users WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(state.db_pool.as_ref())
     .await?;
@@ -69,9 +70,7 @@ pub async fn get_stats(
     }))
 }
 
-pub async fn get_users(
-    State(state): State<AppState>,
-) -> Result<Json<UserListResponse>> {
+pub async fn get_users(State(state): State<AppState>) -> Result<Json<UserListResponse>> {
     let users: Vec<(uuid::Uuid, String, bool, bool, DateTime<Utc>)> = sqlx::query_as(
         "SELECT id, email, email_verified, is_active, created_at FROM users ORDER BY created_at DESC LIMIT 100"
     )
@@ -84,13 +83,15 @@ pub async fn get_users(
 
     let user_list: Vec<UserListItem> = users
         .into_iter()
-        .map(|(id, email, email_verified, is_active, created_at)| UserListItem {
-            id: id.to_string(),
-            email,
-            email_verified,
-            is_active,
-            created_at,
-        })
+        .map(
+            |(id, email, email_verified, is_active, created_at)| UserListItem {
+                id: id.to_string(),
+                email,
+                email_verified,
+                is_active,
+                created_at,
+            },
+        )
         .collect();
 
     Ok(Json(UserListResponse {
@@ -99,12 +100,10 @@ pub async fn get_users(
     }))
 }
 
-pub async fn get_activities(
-    State(state): State<AppState>,
-) -> Result<Json<ActivitiesResponse>> {
+pub async fn get_activities(State(state): State<AppState>) -> Result<Json<ActivitiesResponse>> {
     let codes: Vec<(String, String, DateTime<Utc>)> = sqlx::query_as(
         "SELECT email, code_type, created_at FROM verification_codes 
-         ORDER BY created_at DESC LIMIT 10"
+         ORDER BY created_at DESC LIMIT 10",
     )
     .fetch_all(state.db_pool.as_ref())
     .await?;

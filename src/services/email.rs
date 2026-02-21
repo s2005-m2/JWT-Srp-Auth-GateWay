@@ -63,7 +63,7 @@ impl EmailService {
         let builder = SmtpClientBuilder::new(config.smtp_host.clone(), config.smtp_port as u16)
             .implicit_tls(implicit_tls)
             .credentials((config.smtp_user.clone(), config.smtp_pass.clone()));
-        
+
         let mut client = tokio::time::timeout(Duration::from_secs(30), builder.connect())
             .await
             .map_err(|_| anyhow::anyhow!("SMTP connection timeout"))?

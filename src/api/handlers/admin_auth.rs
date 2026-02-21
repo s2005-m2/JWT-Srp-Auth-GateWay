@@ -64,7 +64,14 @@ pub async fn admin_auth_middleware(
         }
     };
 
-    if state.admin_service.find_by_id(claims.sub).await.ok().flatten().is_none() {
+    if state
+        .admin_service
+        .find_by_id(claims.sub)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
         return (
             StatusCode::UNAUTHORIZED,
             Json(AuthError {

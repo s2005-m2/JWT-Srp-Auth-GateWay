@@ -32,7 +32,7 @@ pub async fn update_smtp_config(
     Json(req): Json<UpdateSmtpConfigRequest>,
 ) -> Result<Json<SmtpConfig>> {
     let (smtp_host, smtp_port) = infer_smtp_config(&req.from_email);
-    
+
     let smtp = SmtpConfig {
         smtp_host,
         smtp_port,
@@ -41,13 +41,16 @@ pub async fn update_smtp_config(
         from_email: req.from_email,
         from_name: "Arc Auth".to_string(),
     };
-    let config = state.system_config_service.update_smtp_config(&smtp).await?;
+    let config = state
+        .system_config_service
+        .update_smtp_config(&smtp)
+        .await?;
     Ok(Json(config))
 }
 
 fn infer_smtp_config(email: &str) -> (String, i32) {
     let domain = email.split('@').nth(1).unwrap_or("");
-    
+
     match domain {
         "qq.com" => ("smtp.qq.com".to_string(), 465),
         "163.com" => ("smtp.163.com".to_string(), 465),
@@ -63,7 +66,10 @@ fn infer_smtp_config(email: &str) -> (String, i32) {
 }
 
 pub async fn get_jwt_secret_info(State(state): State<AppState>) -> Result<Json<JwtSecretInfo>> {
-    let updated_at = state.system_config_service.get_jwt_secret_updated_at().await?;
+    let updated_at = state
+        .system_config_service
+        .get_jwt_secret_updated_at()
+        .await?;
     Ok(Json(JwtSecretInfo { updated_at }))
 }
 

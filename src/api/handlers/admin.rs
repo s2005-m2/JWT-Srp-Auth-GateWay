@@ -34,7 +34,9 @@ pub async fn admin_register(
     Json(req): Json<AdminRegisterRequest>,
 ) -> Result<Json<AdminAuthResponse>> {
     if req.username.len() < 3 {
-        return Err(AppError::InvalidRequest("Username must be at least 3 characters".into()));
+        return Err(AppError::InvalidRequest(
+            "Username must be at least 3 characters".into(),
+        ));
     }
     if req.password.len() < 8 {
         return Err(AppError::WeakPassword);

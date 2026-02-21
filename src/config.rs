@@ -9,6 +9,8 @@ pub struct AppConfig {
     pub jwt: JwtConfig,
     #[serde(default)]
     pub routing: RoutesConfig,
+    #[serde(default)]
+    pub captcha: CaptchaConfig,
 }
 
 fn deserialize_routes<'de, D>(deserializer: D) -> Result<Vec<RouteConfig>, D::Error>
@@ -53,6 +55,12 @@ pub struct RouteConfig {
 pub struct RoutesConfig {
     #[serde(default, deserialize_with = "deserialize_routes")]
     pub routes: Vec<RouteConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct CaptchaConfig {
+    #[serde(default)]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]

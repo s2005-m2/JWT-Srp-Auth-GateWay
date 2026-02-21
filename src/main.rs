@@ -13,9 +13,12 @@ mod services;
 
 use api::AppState;
 use config::AppConfig;
-use gateway::{JwtValidator, ProxyConfigCache};
 use gateway::config_cache::CachedRoute;
-use services::{AdminService, ApiKeyService, EmailService, ProxyConfigService, SrpService, SystemConfigService, TokenService, UserService};
+use gateway::{JwtValidator, ProxyConfigCache};
+use services::{
+    AdminService, ApiKeyService, CaptchaService, EmailService, ProxyConfigService, SrpService,
+    SystemConfigService, TokenService, UserService,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -44,10 +47,14 @@ async fn main() -> anyhow::Result<()> {
         config.jwt.auto_refresh_threshold,
     ));
     let email_service = Arc::new(EmailService::new(system_config_service.clone()));
-    let admin_service = Arc::new(AdminService::new(db_pool.clone(), system_config_service.clone()));
+    let admin_service = Arc::new(AdminService::new(
+        db_pool.clone(),
+        system_config_service.clone(),
+    ));
     let proxy_config_service = Arc::new(ProxyConfigService::new(db_pool.clone()));
     let api_key_service = Arc::new(ApiKeyService::new(db_pool.clone()));
     let srp_service = Arc::new(SrpService::new(db_pool.clone()));
+    let captcha_service = Arc::new(CaptchaService::new(db_pool.clone()));
 
     let default_upstream = if config.upstream.default_upstream.is_empty() {
         None
@@ -71,7 +78,10 @@ async fn main() -> anyhow::Result<()> {
         })
         .collect();
     if !static_routes.is_empty() {
-        tracing::info!("Loaded {} static routes from config/env", static_routes.len());
+        tracing::info!(
+            "Loaded {} static routes from config/env",
+            static_routes.len()
+        );
         config_cache.set_static_routes(static_routes);
     }
 
@@ -98,6 +108,8 @@ async fn main() -> anyhow::Result<()> {
         system_config_service,
         api_key_service,
         srp_service,
+        captcha_service,
+        captcha_enabled: config.captcha.enabled,
         jwt_validator: Some(jwt_validator.clone()),
         config_cache: Some(config_cache.clone()),
         request_counter,
@@ -115,7 +127,7 @@ async fn main() -> anyhow::Result<()> {
     let api_port = config.server.api_port;
     let admin_port = config.server.admin_port;
     let state_for_admin = state.clone();
-    
+
     tokio::spawn(async move {
         if let Err(e) = run_auth_server(state, api_port).await {
             tracing::error!("Auth API server failed: {}", e);
@@ -128,8 +140,11 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    tracing::info!("Starting Pingora gateway on 0.0.0.0:{}", config.server.gateway_port);
-    
+    tracing::info!(
+        "Starting Pingora gateway on 0.0.0.0:{}",
+        config.server.gateway_port
+    );
+
     std::thread::spawn(move || {
         start_gateway(config, jwt_validator, config_cache);
     });
@@ -152,7 +167,10 @@ fn init_logging() {
 async fn run_auth_server(state: AppState, port: u16) -> anyhow::Result<()> {
     let app = api::create_auth_router(state);
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
-    tracing::info!("Auth API listening on 127.0.0.1:{} (internal, proxied via gateway)", port);
+    tracing::info!(
+        "Auth API listening on 127.0.0.1:{} (internal, proxied via gateway)",
+        port
+    );
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -164,7 +182,10 @@ async fn run_auth_server(state: AppState, port: u16) -> anyhow::Result<()> {
 async fn run_admin_server(state: AppState, port: u16) -> anyhow::Result<()> {
     let app = api::create_admin_router(state);
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    tracing::info!("Admin API listening on 0.0.0.0:{} (direct access, can be disabled)", port);
+    tracing::info!(
+        "Admin API listening on 0.0.0.0:{} (direct access, can be disabled)",
+        port
+    );
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -188,17 +209,25 @@ async fn initialize_admin_token(admin_service: &AdminService) -> anyhow::Result<
     Ok(())
 }
 
-fn start_gateway(config: Arc<AppConfig>, jwt_validator: Arc<JwtValidator>, config_cache: Arc<ProxyConfigCache>) {
-    use pingora::server::Server;
-    use pingora::server::configuration::ServerConf;
-    use pingora::proxy::http_proxy_service;
+fn start_gateway(
+    config: Arc<AppConfig>,
+    jwt_validator: Arc<JwtValidator>,
+    config_cache: Arc<ProxyConfigCache>,
+) {
     use gateway::proxy::AuthGateway;
+    use pingora::proxy::http_proxy_service;
+    use pingora::server::configuration::ServerConf;
+    use pingora::server::Server;
 
     let mut server_conf = ServerConf::default();
-    server_conf.threads = std::cmp::max(num_cpus::get()*2-1, 2);
+    server_conf.threads = std::cmp::max(num_cpus::get() * 2 - 1, 2);
     server_conf.work_stealing = true;
-    
-    tracing::info!("Pingora config: threads={}, work_stealing={}", server_conf.threads, server_conf.work_stealing);
+
+    tracing::info!(
+        "Pingora config: threads={}, work_stealing={}",
+        server_conf.threads,
+        server_conf.work_stealing
+    );
 
     let mut server = Server::new_with_opt_and_conf(None, server_conf);
     server.bootstrap();
@@ -237,38 +266,60 @@ async fn load_proxy_config(
 
 async fn database_cleanup_scheduler(db_pool: Arc<sqlx::PgPool>) {
     use tokio::time::{interval, Duration};
-    
+
     let mut cleanup_interval = interval(Duration::from_secs(60 * 60));
-    
+
     loop {
         cleanup_interval.tick().await;
-        
+
         let deleted_codes = sqlx::query("DELETE FROM verification_codes WHERE expires_at < NOW()")
             .execute(db_pool.as_ref())
             .await;
-        
+
         match deleted_codes {
             Ok(result) => {
                 if result.rows_affected() > 0 {
-                    tracing::info!("Cleaned up {} expired verification codes", result.rows_affected());
+                    tracing::info!(
+                        "Cleaned up {} expired verification codes",
+                        result.rows_affected()
+                    );
                 }
             }
             Err(e) => tracing::error!("Failed to cleanup verification codes: {}", e),
         }
-        
-        let deleted_tokens = sqlx::query(
-            "DELETE FROM refresh_tokens WHERE expires_at < NOW() OR revoked = TRUE"
-        )
-            .execute(db_pool.as_ref())
-            .await;
-        
+
+        let deleted_tokens =
+            sqlx::query("DELETE FROM refresh_tokens WHERE expires_at < NOW() OR revoked = TRUE")
+                .execute(db_pool.as_ref())
+                .await;
+
         match deleted_tokens {
             Ok(result) => {
                 if result.rows_affected() > 0 {
-                    tracing::info!("Cleaned up {} expired/revoked refresh tokens", result.rows_affected());
+                    tracing::info!(
+                        "Cleaned up {} expired/revoked refresh tokens",
+                        result.rows_affected()
+                    );
                 }
             }
             Err(e) => tracing::error!("Failed to cleanup refresh tokens: {}", e),
+        }
+
+        let deleted_captchas =
+            sqlx::query("DELETE FROM captchas WHERE expires_at < NOW() OR used = TRUE")
+                .execute(db_pool.as_ref())
+                .await;
+
+        match deleted_captchas {
+            Ok(result) => {
+                if result.rows_affected() > 0 {
+                    tracing::info!(
+                        "Cleaned up {} expired/used captchas",
+                        result.rows_affected()
+                    );
+                }
+            }
+            Err(e) => tracing::error!("Failed to cleanup captchas: {}", e),
         }
     }
 }
@@ -278,12 +329,12 @@ async fn jwt_rotation_scheduler(
     jwt_validator: Arc<JwtValidator>,
 ) {
     use tokio::time::{interval, Duration};
-    
+
     let mut check_interval = interval(Duration::from_secs(24 * 60 * 60));
-    
+
     loop {
         check_interval.tick().await;
-        
+
         match system_config.should_auto_rotate().await {
             Ok(true) => {
                 tracing::info!("JWT secret is older than 30 days, rotating...");

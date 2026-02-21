@@ -18,7 +18,10 @@ pub struct AdminService {
 
 impl AdminService {
     pub fn new(pool: Arc<PgPool>, system_config: Arc<SystemConfigService>) -> Self {
-        Self { pool, system_config }
+        Self {
+            pool,
+            system_config,
+        }
     }
 
     pub async fn find_by_username(&self, username: &str) -> Result<Option<Admin>> {
@@ -51,10 +54,10 @@ impl AdminService {
         registration_token: &str,
     ) -> Result<Admin> {
         let token_hash = hash_token(registration_token);
-        
+
         let token_record = sqlx::query_as::<_, AdminRegistrationToken>(
             "SELECT * FROM admin_registration_tokens 
-             WHERE token_hash = $1 AND used = FALSE AND expires_at > NOW()"
+             WHERE token_hash = $1 AND used = FALSE AND expires_at > NOW()",
         )
         .bind(&token_hash)
         .fetch_optional(self.pool.as_ref())
@@ -64,20 +67,18 @@ impl AdminService {
         let password_hash = hash_password(password)?;
 
         let admin = sqlx::query_as::<_, Admin>(
-            "INSERT INTO admins (username, password_hash) VALUES ($1, $2) RETURNING *"
+            "INSERT INTO admins (username, password_hash) VALUES ($1, $2) RETURNING *",
         )
         .bind(username)
         .bind(&password_hash)
         .fetch_one(self.pool.as_ref())
         .await?;
 
-        sqlx::query(
-            "UPDATE admin_registration_tokens SET used = TRUE, used_by = $1 WHERE id = $2"
-        )
-        .bind(admin.id)
-        .bind(token_record.id)
-        .execute(self.pool.as_ref())
-        .await?;
+        sqlx::query("UPDATE admin_registration_tokens SET used = TRUE, used_by = $1 WHERE id = $2")
+            .bind(admin.id)
+            .bind(token_record.id)
+            .execute(self.pool.as_ref())
+            .await?;
 
         Ok(admin)
     }
@@ -92,7 +93,7 @@ impl AdminService {
         let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
         sqlx::query(
-            "INSERT INTO admin_registration_tokens (token_hash, expires_at) VALUES ($1, $2)"
+            "INSERT INTO admin_registration_tokens (token_hash, expires_at) VALUES ($1, $2)",
         )
         .bind(&token_hash)
         .bind(expires_at)
@@ -104,13 +105,13 @@ impl AdminService {
 
     pub async fn generate_admin_jwt(&self, admin: &Admin) -> Result<String> {
         use jsonwebtoken::{encode, EncodingKey, Header};
-        
+
         let jwt_secret = self.system_config.get_jwt_secret().await?;
-        
+
         const ADMIN_TOKEN_TTL_SECS: i64 = 86400;
         let now = chrono::Utc::now().timestamp();
         let exp = now + ADMIN_TOKEN_TTL_SECS;
-        
+
         let claims = AdminTokenClaims {
             sub: admin.id,
             username: admin.username.clone(),

@@ -79,12 +79,11 @@ impl ApiKeyService {
     }
 
     pub async fn delete(&self, id: Uuid, admin_id: Uuid) -> Result<bool> {
-        let result =
-            sqlx::query("DELETE FROM api_keys WHERE id = $1 AND admin_id = $2")
-                .bind(id)
-                .bind(admin_id)
-                .execute(self.db_pool.as_ref())
-                .await?;
+        let result = sqlx::query("DELETE FROM api_keys WHERE id = $1 AND admin_id = $2")
+            .bind(id)
+            .bind(admin_id)
+            .execute(self.db_pool.as_ref())
+            .await?;
 
         Ok(result.rows_affected() > 0)
     }

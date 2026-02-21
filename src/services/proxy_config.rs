@@ -15,11 +15,10 @@ impl ProxyConfigService {
     }
 
     pub async fn list_routes(&self) -> Result<Vec<ProxyRoute>> {
-        let routes = sqlx::query_as::<_, ProxyRoute>(
-            "SELECT * FROM proxy_routes ORDER BY path_prefix"
-        )
-        .fetch_all(self.pool.as_ref())
-        .await?;
+        let routes =
+            sqlx::query_as::<_, ProxyRoute>("SELECT * FROM proxy_routes ORDER BY path_prefix")
+                .fetch_all(self.pool.as_ref())
+                .await?;
         Ok(routes)
     }
 
@@ -32,7 +31,7 @@ impl ProxyConfigService {
     ) -> Result<ProxyRoute> {
         let route = sqlx::query_as::<_, ProxyRoute>(
             "INSERT INTO proxy_routes (path_prefix, upstream_address, require_auth, strip_prefix) 
-             VALUES ($1, $2, $3, $4) RETURNING *"
+             VALUES ($1, $2, $3, $4) RETURNING *",
         )
         .bind(path_prefix)
         .bind(upstream_address)
@@ -55,7 +54,7 @@ impl ProxyConfigService {
         let route = sqlx::query_as::<_, ProxyRoute>(
             "UPDATE proxy_routes SET path_prefix = $2, upstream_address = $3, 
              require_auth = $4, strip_prefix = $5, enabled = $6, updated_at = NOW() 
-             WHERE id = $1 RETURNING *"
+             WHERE id = $1 RETURNING *",
         )
         .bind(id)
         .bind(path_prefix)
@@ -77,11 +76,10 @@ impl ProxyConfigService {
     }
 
     pub async fn list_rate_limits(&self) -> Result<Vec<RateLimitRule>> {
-        let rules = sqlx::query_as::<_, RateLimitRule>(
-            "SELECT * FROM rate_limit_rules ORDER BY name"
-        )
-        .fetch_all(self.pool.as_ref())
-        .await?;
+        let rules =
+            sqlx::query_as::<_, RateLimitRule>("SELECT * FROM rate_limit_rules ORDER BY name")
+                .fetch_all(self.pool.as_ref())
+                .await?;
         Ok(rules)
     }
 
@@ -120,7 +118,7 @@ impl ProxyConfigService {
         let rule = sqlx::query_as::<_, RateLimitRule>(
             "UPDATE rate_limit_rules SET name = $2, path_pattern = $3, limit_by = $4, 
              max_requests = $5, window_secs = $6, enabled = $7, updated_at = NOW() 
-             WHERE id = $1 RETURNING *"
+             WHERE id = $1 RETURNING *",
         )
         .bind(id)
         .bind(name)
@@ -143,11 +141,9 @@ impl ProxyConfigService {
     }
 
     pub async fn get_jwt_config(&self) -> Result<JwtConfigRow> {
-        let config = sqlx::query_as::<_, JwtConfigRow>(
-            "SELECT * FROM jwt_config WHERE id = 1"
-        )
-        .fetch_one(self.pool.as_ref())
-        .await?;
+        let config = sqlx::query_as::<_, JwtConfigRow>("SELECT * FROM jwt_config WHERE id = 1")
+            .fetch_one(self.pool.as_ref())
+            .await?;
         Ok(config)
     }
 
@@ -160,7 +156,7 @@ impl ProxyConfigService {
         let config = sqlx::query_as::<_, JwtConfigRow>(
             "UPDATE jwt_config SET access_token_ttl_secs = $1, refresh_token_ttl_secs = $2, 
              auto_refresh_threshold_secs = $3, updated_at = NOW() 
-             WHERE id = 1 RETURNING *"
+             WHERE id = 1 RETURNING *",
         )
         .bind(access_token_ttl_secs)
         .bind(refresh_token_ttl_secs)

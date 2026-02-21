@@ -22,7 +22,7 @@ pub async fn request_password_reset(
     info!(email = %req.email, "Password reset requested");
 
     let user = state.user_service.find_by_email(&req.email).await?;
-    
+
     if user.is_none() {
         return Ok(Json(RequestResetResponse {
             message: "If the email exists, a reset code has been sent".to_string(),
@@ -31,7 +31,10 @@ pub async fn request_password_reset(
 
     let code = generate_code();
     save_verification_code(&state, &req.email, &code, "password_reset").await?;
-    state.email_service.send_password_reset(&req.email, &code).await?;
+    state
+        .email_service
+        .send_password_reset(&req.email, &code)
+        .await?;
 
     info!(email = %req.email, "Password reset code sent");
 
@@ -123,12 +126,7 @@ async fn save_verification_code(
 
 const MAX_VERIFICATION_ATTEMPTS: i32 = 5;
 
-async fn verify_code(
-    state: &AppState,
-    email: &str,
-    code: &str,
-    code_type: &str,
-) -> Result<bool> {
+async fn verify_code(state: &AppState, email: &str, code: &str, code_type: &str) -> Result<bool> {
     let result: Option<(uuid::Uuid, i32)> = sqlx::query_as(
         "SELECT id, attempts FROM verification_codes 
          WHERE email = $1 AND code_type = $2 
@@ -167,12 +165,7 @@ async fn verify_code(
     Ok(valid.is_some())
 }
 
-async fn mark_code_used(
-    state: &AppState,
-    email: &str,
-    code: &str,
-    code_type: &str,
-) -> Result<()> {
+async fn mark_code_used(state: &AppState, email: &str, code: &str, code_type: &str) -> Result<()> {
     sqlx::query(
         "UPDATE verification_codes SET used = TRUE 
          WHERE email = $1 AND code = $2 AND code_type = $3",

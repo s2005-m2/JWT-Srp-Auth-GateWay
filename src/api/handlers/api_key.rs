@@ -38,7 +38,9 @@ pub async fn create_api_key(
     Json(req): Json<CreateApiKeyRequest>,
 ) -> Result<Json<CreateApiKeyResponse>> {
     if req.name.is_empty() || req.name.len() > 255 {
-        return Err(AppError::InvalidRequest("Name must be 1-255 characters".into()));
+        return Err(AppError::InvalidRequest(
+            "Name must be 1-255 characters".into(),
+        ));
     }
 
     let (api_key, raw_key) = state

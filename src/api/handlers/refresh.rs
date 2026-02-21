@@ -31,15 +31,21 @@ pub async fn refresh(
         .await?
         .ok_or(crate::error::AppError::InvalidToken)?;
 
-    state.token_service.revoke_refresh_token(&req.refresh_token).await?;
+    state
+        .token_service
+        .revoke_refresh_token(&req.refresh_token)
+        .await?;
 
-    let access = state.token_service.generate_access_token(user.id, &user.email).await?;
+    let access = state
+        .token_service
+        .generate_access_token(user.id, &user.email)
+        .await?;
     let refresh = state.token_service.generate_refresh_token(user.id).await?;
 
     let access_claims = state.token_service.validate_access_token(&access).await?;
     let should_refresh = state.token_service.should_refresh(&access_claims);
 
-    Ok(Json(RefreshResponse { 
+    Ok(Json(RefreshResponse {
         access_token: access,
         refresh_token: refresh,
         should_refresh,

@@ -26,12 +26,10 @@ impl SystemConfigService {
 
         if exists.is_none() {
             let jwt_secret = generate_jwt_secret();
-            sqlx::query(
-                "INSERT INTO system_config (id, jwt_secret) VALUES (1, $1)"
-            )
-            .bind(&jwt_secret)
-            .execute(self.pool.as_ref())
-            .await?;
+            sqlx::query("INSERT INTO system_config (id, jwt_secret) VALUES (1, $1)")
+                .bind(&jwt_secret)
+                .execute(self.pool.as_ref())
+                .await?;
             tracing::info!("System config initialized with new JWT secret");
         }
 
@@ -40,11 +38,9 @@ impl SystemConfigService {
     }
 
     async fn reload_cache(&self) -> Result<()> {
-        let config = sqlx::query_as::<_, SystemConfig>(
-            "SELECT * FROM system_config WHERE id = 1"
-        )
-        .fetch_one(self.pool.as_ref())
-        .await?;
+        let config = sqlx::query_as::<_, SystemConfig>("SELECT * FROM system_config WHERE id = 1")
+            .fetch_one(self.pool.as_ref())
+            .await?;
 
         let mut cache = self.cache.write().await;
         *cache = Some(config);
@@ -88,7 +84,7 @@ impl SystemConfigService {
                 smtp_host = $1, smtp_port = $2, smtp_user = $3, 
                 smtp_pass = $4, from_email = $5, from_name = $6,
                 updated_at = NOW()
-             WHERE id = 1"
+             WHERE id = 1",
         )
         .bind(&smtp.smtp_host)
         .bind(smtp.smtp_port)
@@ -118,7 +114,7 @@ impl SystemConfigService {
         sqlx::query(
             "UPDATE system_config SET 
                 jwt_secret = $1, jwt_secret_updated_at = NOW(), updated_at = NOW()
-             WHERE id = 1"
+             WHERE id = 1",
         )
         .bind(&new_secret)
         .execute(self.pool.as_ref())

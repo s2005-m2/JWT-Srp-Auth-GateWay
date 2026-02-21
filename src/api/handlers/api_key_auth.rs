@@ -102,7 +102,9 @@ pub async fn api_key_auth_middleware(
     };
 
     request.extensions_mut().insert(key_record.admin_id);
-    request.extensions_mut().insert(ApiKeyPermissions::new(&key_record.permissions));
+    request
+        .extensions_mut()
+        .insert(ApiKeyPermissions::new(&key_record.permissions));
 
     next.run(request).await
 }

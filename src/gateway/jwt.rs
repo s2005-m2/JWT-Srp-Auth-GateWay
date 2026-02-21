@@ -17,7 +17,7 @@ impl JwtValidator {
     pub fn new(system_config: Arc<SystemConfigService>, auto_refresh_threshold: i64) -> Self {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_required_spec_claims(&["exp", "sub", "iat"]);
-        
+
         Self {
             system_config,
             validation,

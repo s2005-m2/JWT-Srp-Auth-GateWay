@@ -2,12 +2,14 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use crate::error::{AppError, Result};
 use crate::api::AppState;
+use crate::error::{AppError, Result};
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
     pub email: String,
+    pub captcha_id: Option<String>,
+    pub captcha_text: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -21,19 +23,39 @@ pub async fn register(
 ) -> Result<Json<RegisterResponse>> {
     info!(email = %req.email, "Registration attempt");
 
+    if state.captcha_enabled {
+        let captcha_id = req.captcha_id.as_deref().ok_or(AppError::InvalidCaptcha)?;
+        let captcha_text = req
+            .captcha_text
+            .as_deref()
+            .ok_or(AppError::InvalidCaptcha)?;
+        state
+            .captcha_service
+            .validate(captcha_id, captcha_text)
+            .await?;
+    }
+
     if !is_valid_email(&req.email) {
         warn!(email = %req.email, "Registration failed: invalid email format");
         return Err(AppError::InvalidEmail);
     }
 
-    if state.user_service.find_by_email(&req.email).await?.is_some() {
+    if state
+        .user_service
+        .find_by_email(&req.email)
+        .await?
+        .is_some()
+    {
         warn!(email = %req.email, "Registration failed: email already exists");
         return Err(AppError::EmailExists);
     }
 
     let code = generate_code();
     save_verification_code(&state, &req.email, &code, "register").await?;
-    state.email_service.send_verification_code(&req.email, &code).await?;
+    state
+        .email_service
+        .send_verification_code(&req.email, &code)
+        .await?;
 
     info!(email = %req.email, "Registration verification code sent");
 
@@ -45,30 +67,30 @@ pub async fn register(
 fn is_valid_email(email: &str) -> bool {
     const MAX_EMAIL_LENGTH: usize = 254;
     const MAX_LOCAL_LENGTH: usize = 64;
-    
+
     if email.len() > MAX_EMAIL_LENGTH || email.len() < 5 {
         return false;
     }
-    
+
     let parts: Vec<&str> = email.split('@').collect();
     if parts.len() != 2 {
         return false;
     }
-    
+
     let (local, domain) = (parts[0], parts[1]);
-    
+
     if local.is_empty() || local.len() > MAX_LOCAL_LENGTH {
         return false;
     }
-    
+
     if !is_valid_local_part(local) {
         return false;
     }
-    
+
     if !is_valid_domain(domain) {
         return false;
     }
-    
+
     let domain_lower = domain.to_lowercase();
     const ALLOWED_DOMAINS: &[&str] = &[
         "qq.com",
@@ -82,7 +104,7 @@ fn is_valid_email(email: &str) -> bool {
         "yahoo.com",
         "icloud.com",
     ];
-    
+
     ALLOWED_DOMAINS.contains(&domain_lower.as_str())
 }
 
@@ -90,26 +112,26 @@ fn is_valid_local_part(local: &str) -> bool {
     if local.starts_with('.') || local.ends_with('.') || local.contains("..") {
         return false;
     }
-    
-    local.chars().all(|c| {
-        c.is_ascii_alphanumeric() || "!#$%&'*+/=?^_`{|}~.-".contains(c)
-    })
+
+    local
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "!#$%&'*+/=?^_`{|}~.-".contains(c))
 }
 
 fn is_valid_domain(domain: &str) -> bool {
     if domain.is_empty() || domain.len() > 253 {
         return false;
     }
-    
+
     if domain.starts_with('.') || domain.ends_with('.') || domain.starts_with('-') {
         return false;
     }
-    
+
     let labels: Vec<&str> = domain.split('.').collect();
     if labels.len() < 2 {
         return false;
     }
-    
+
     for label in &labels {
         if label.is_empty() || label.len() > 63 {
             return false;
@@ -121,7 +143,7 @@ fn is_valid_domain(domain: &str) -> bool {
             return false;
         }
     }
-    
+
     let tld = match labels.last() {
         Some(t) => t,
         None => {
@@ -132,7 +154,7 @@ fn is_valid_domain(domain: &str) -> bool {
     if tld.chars().all(|c| c.is_ascii_digit()) {
         return false;
     }
-    
+
     true
 }
 
@@ -150,7 +172,7 @@ async fn save_verification_code(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO verification_codes (email, code, code_type, expires_at) 
-         VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes')"
+         VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes')",
     )
     .bind(email)
     .bind(code)

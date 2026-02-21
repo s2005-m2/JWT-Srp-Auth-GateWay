@@ -53,7 +53,9 @@ pub async fn srp_verify(
     State(state): State<AppState>,
     Json(req): Json<SrpVerifyRequest>,
 ) -> Result<Json<SrpVerifyResponse>> {
-    let session_id = req.session_id.parse::<Uuid>()
+    let session_id = req
+        .session_id
+        .parse::<Uuid>()
         .map_err(|_| crate::error::AppError::InvalidRequest("Invalid session_id".into()))?;
 
     let (user_id, email, server_proof) = state
@@ -61,7 +63,10 @@ pub async fn srp_verify(
         .verify_login(session_id, &req.client_proof)
         .await?;
 
-    let access = state.token_service.generate_access_token(user_id, &email).await?;
+    let access = state
+        .token_service
+        .generate_access_token(user_id, &email)
+        .await?;
     let refresh = state.token_service.generate_refresh_token(user_id).await?;
 
     Ok(Json(SrpVerifyResponse {
